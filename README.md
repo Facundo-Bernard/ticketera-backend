@@ -86,6 +86,11 @@ uvicorn src.main:app --reload
 - **`POST /api/v1/tickets/{id}/images`**: Adjuntar imágenes adicionales a un ticket existente.
 - **`DELETE /api/v1/tickets/{id}/images/{file_id}`**: Eliminar una imagen puntual del ticket y borrarla de GridFS.
 
+### Catálogos y Opciones (`/api/v1/catalogs`)
+- **`GET /api/v1/catalogs/estados`**: Catálogo de estados válidos (`abierto`, `en_progreso`, `resuelto`, `cerrado`).
+- **`GET /api/v1/catalogs/prioridades`**: Catálogo de prioridades válidas (`baja`, `media`, `alta`, `critica`).
+- **`GET /api/v1/catalogs/asignables`**: Catálogo de técnicos y áreas asignables.
+
 ### Archivos (`/api/v1/files`)
 - **`GET /api/v1/files/{file_id}`**: Stream binario y descarga/visualización de imágenes desde GridFS.
 

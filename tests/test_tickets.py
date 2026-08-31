@@ -155,6 +155,28 @@ def test_ticket_filters(client):
     assert res_fechas.status_code == 200, f"Error en filtro de fechas: {res_fechas.text}"
     assert len(res_fechas.json()) >= 2
 
+def test_catalog_endpoints(client):
+    # 1. Estados
+    res_estados = client.get("/api/v1/catalogs/estados")
+    assert res_estados.status_code == 200
+    estados = res_estados.json()
+    assert len(estados) == 4
+    assert any(e["value"] == "abierto" for e in estados)
+
+    # 2. Prioridades
+    res_prioridades = client.get("/api/v1/catalogs/prioridades")
+    assert res_prioridades.status_code == 200
+    prioridades = res_prioridades.json()
+    assert len(prioridades) == 4
+    assert any(p["value"] == "alta" for p in prioridades)
+
+    # 3. Asignables
+    res_asignables = client.get("/api/v1/catalogs/asignables")
+    assert res_asignables.status_code == 200
+    asignables = res_asignables.json()
+    assert len(asignables) >= 3
+    assert any(a["id"] == "soporte_tecnico" for a in asignables)
+
 if __name__ == "__main__":
     import sys
     print("Ejecutando suite de pruebas...")
@@ -165,4 +187,6 @@ if __name__ == "__main__":
         print(" [OK] test_ticket_crud_and_gridfs_flow")
         test_ticket_filters(test_client)
         print(" [OK] test_ticket_filters")
+        test_catalog_endpoints(test_client)
+        print(" [OK] test_catalog_endpoints")
     print("\n Todas las pruebas pasaron exitosamente!")
