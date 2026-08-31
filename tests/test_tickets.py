@@ -146,14 +146,19 @@ def test_ticket_filters(client):
     assert len(tickets_carlos) >= 1
     assert any("Carlos" in t["asignar"] for t in tickets_carlos)
 
-    # 3. Filtrar por rango de fechas (desde hoy temprano hasta mañana)
-    from datetime import datetime, timezone, timedelta
+    # 3. Filtrar por fecha parcial simple (solo día YYYY-MM-DD sin hora)
+    from datetime import datetime, timezone
     ahora = datetime.now(timezone.utc)
-    desde = (ahora - timedelta(hours=1)).isoformat()
-    hasta = (ahora + timedelta(hours=1)).isoformat()
-    res_fechas = client.get("/api/v1/tickets/", params={"fecha_desde": desde, "fecha_hasta": hasta})
-    assert res_fechas.status_code == 200, f"Error en filtro de fechas: {res_fechas.text}"
-    assert len(res_fechas.json()) >= 2
+    hoy_str = ahora.strftime("%Y-%m-%d")
+    res_fecha_simple = client.get("/api/v1/tickets/", params={"fecha_desde": hoy_str, "fecha_hasta": hoy_str})
+    assert res_fecha_simple.status_code == 200, f"Error en filtro de fecha simple: {res_fecha_simple.text}"
+    assert len(res_fecha_simple.json()) >= 2
+
+    # 5. Filtrar pasando solo fecha_hasta con hora (debe autocompletar hasta las 23:59:59 y encontrar los tickets)
+    hoy_iso_hora = ahora.strftime("%Y-%m-%dT%H:%M")
+    res_solo_hasta = client.get("/api/v1/tickets/", params={"fecha_hasta": hoy_iso_hora})
+    assert res_solo_hasta.status_code == 200
+    assert len(res_solo_hasta.json()) >= 2
 
 def test_catalog_endpoints(client):
     # 1. Estados
@@ -192,6 +197,63 @@ def test_invalid_file_upload_rejected(client):
     assert res.status_code == 400
     assert "no es una imagen válida" in res.json()["message"]
 
+def test_atomic_sequence_no_collision_on_delete(client):
+    # 1. Crear ticket A
+    res_a = client.post("/api/v1/tickets/", data={
+        "titulo": "Ticket Secuencia A",
+        "descripcion": "Probando secuencia única",
+        "correo": "seq_a@coopya.com"
+    })
+    assert res_a.status_code == 201
+    ticket_a = res_a.json()
+    num_a = int(ticket_a["identificador"].split("-")[1])
+
+    # 2. Crear ticket B
+    res_b = client.post("/api/v1/tickets/", data={
+        "titulo": "Ticket Secuencia B",
+        "descripcion": "Probando secuencia única",
+        "correo": "seq_b@coopya.com"
+    })
+    assert res_b.status_code == 201
+    ticket_b = res_b.json()
+    num_b = int(ticket_b["identificador"].split("-")[1])
+    assert num_b > num_a
+
+    # 3. Eliminar ticket A
+    del_res = client.delete(f"/api/v1/tickets/{ticket_a['id']}")
+    assert del_res.status_code == 204
+
+    # 4. Crear ticket C (debe avanzar a num_b + 1 y NUNCA retroceder o colisionar con num_a)
+    res_c = client.post("/api/v1/tickets/", data={
+        "titulo": "Ticket Secuencia C",
+        "descripcion": "Probando secuencia única post delete",
+        "correo": "seq_c@coopya.com"
+    })
+    assert res_c.status_code == 201
+    ticket_c = res_c.json()
+    num_c = int(ticket_c["identificador"].split("-")[1])
+    assert num_c > num_b
+
+def test_rate_limit_and_cooldown(client):
+    email = "antispam_user@coopya.com"
+
+    # 1. Primer ticket debe crearse con éxito
+    res1 = client.post("/api/v1/tickets/", data={
+        "titulo": "Ticket Anti-Spam 1",
+        "descripcion": "Primer ticket del usuario",
+        "correo": email
+    })
+    assert res1.status_code == 201
+
+    # 2. Segundo ticket inmediato debe ser bloqueado por Cooldown (60 seg)
+    res2 = client.post("/api/v1/tickets/", data={
+        "titulo": "Ticket Anti-Spam 2 Inmediato",
+        "descripcion": "Segundo ticket intentado al instante",
+        "correo": email
+    })
+    assert res2.status_code == 400
+    assert "espera" in res2.json()["message"].lower() or "anti-spam" in res2.json()["message"].lower()
+
 if __name__ == "__main__":
     import sys
     print("Ejecutando suite de pruebas...")
@@ -206,4 +268,8 @@ if __name__ == "__main__":
         print(" [OK] test_catalog_endpoints")
         test_invalid_file_upload_rejected(test_client)
         print(" [OK] test_invalid_file_upload_rejected")
+        test_atomic_sequence_no_collision_on_delete(test_client)
+        print(" [OK] test_atomic_sequence_no_collision_on_delete")
+        test_rate_limit_and_cooldown(test_client)
+        print(" [OK] test_rate_limit_and_cooldown")
     print("\n Todas las pruebas pasaron exitosamente!")
