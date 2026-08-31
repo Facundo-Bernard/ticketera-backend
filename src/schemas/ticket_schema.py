@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_serializer
 from typing import Optional, List, Union
-from datetime import datetime
+from datetime import datetime, timezone
 from beanie import PydanticObjectId
 from ..models.ticket_model import PrioridadEnum, EstadoEnum
 
@@ -40,6 +40,14 @@ class TicketResponse(BaseModel):
     imagenes: List[str]
     fecha_creacion: datetime
     fecha_edicion: Optional[datetime]
+
+    @field_serializer("fecha_creacion", "fecha_edicion", when_used="json")
+    def serialize_datetime(self, dt: Optional[datetime]) -> Optional[str]:
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat().replace("+00:00", "Z")
 
     model_config = ConfigDict(
         from_attributes=True,

@@ -1,6 +1,7 @@
 import io
 import sys
 import os
+import uuid
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
@@ -24,11 +25,12 @@ def test_health_check(client):
     assert response.json() == {"status": "ok", "message": "Service is running"}
 
 def test_ticket_crud_and_gridfs_flow(client):
+    uid = uuid.uuid4().hex[:6]
     # 1. Crear un ticket con formulario y fotos adjuntas todo en una sola petición
     form_data = {
         "titulo": "Falla en monitor principal",
         "descripcion": "La pantalla no enciende tras corte de luz",
-        "correo": "soporte@coopya.com",
+        "correo": f"soporte_{uid}@coopya.com",
         "prioridad": "alta",
         "asignar": "Tecnico Redes"
     }
@@ -198,11 +200,12 @@ def test_invalid_file_upload_rejected(client):
     assert "no es una imagen válida" in res.json()["message"]
 
 def test_atomic_sequence_no_collision_on_delete(client):
+    uid = uuid.uuid4().hex[:6]
     # 1. Crear ticket A
     res_a = client.post("/api/v1/tickets/", data={
         "titulo": "Ticket Secuencia A",
         "descripcion": "Probando secuencia única",
-        "correo": "seq_a@coopya.com"
+        "correo": f"seq_a_{uid}@coopya.com"
     })
     assert res_a.status_code == 201
     ticket_a = res_a.json()
@@ -212,7 +215,7 @@ def test_atomic_sequence_no_collision_on_delete(client):
     res_b = client.post("/api/v1/tickets/", data={
         "titulo": "Ticket Secuencia B",
         "descripcion": "Probando secuencia única",
-        "correo": "seq_b@coopya.com"
+        "correo": f"seq_b_{uid}@coopya.com"
     })
     assert res_b.status_code == 201
     ticket_b = res_b.json()
@@ -227,7 +230,7 @@ def test_atomic_sequence_no_collision_on_delete(client):
     res_c = client.post("/api/v1/tickets/", data={
         "titulo": "Ticket Secuencia C",
         "descripcion": "Probando secuencia única post delete",
-        "correo": "seq_c@coopya.com"
+        "correo": f"seq_c_{uid}@coopya.com"
     })
     assert res_c.status_code == 201
     ticket_c = res_c.json()
@@ -235,7 +238,8 @@ def test_atomic_sequence_no_collision_on_delete(client):
     assert num_c > num_b
 
 def test_rate_limit_and_cooldown(client):
-    email = "antispam_user@coopya.com"
+    uid = uuid.uuid4().hex[:6]
+    email = f"antispam_{uid}@coopya.com"
 
     # 1. Primer ticket debe crearse con éxito
     res1 = client.post("/api/v1/tickets/", data={
