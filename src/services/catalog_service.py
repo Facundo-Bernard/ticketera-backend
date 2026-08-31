@@ -29,8 +29,8 @@ class CatalogService:
 
     async def get_asignables(self) -> List[OptionItem]:
         return [
-            OptionItem(value="Facundo Bernard", label="Facundo Bernard"),
-            OptionItem(value="Nicolas Gonzalez", label="Nicolas Gonzalez"),
-            OptionItem(value="Nahuel Monti", label="Nahuel Monti")
+            OptionItem(value="facundo_bernard", label="Facundo Bernard"),
+            OptionItem(value="nicolas_gonzalez", label="Nicolas Gonzalez"),
+            OptionItem(value="nahuel_monti", label="Nahuel Monti")
         ]
 

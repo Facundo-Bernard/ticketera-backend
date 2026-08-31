@@ -182,14 +182,15 @@ def test_catalog_endpoints(client):
     assert res_asignables.status_code == 200
     asignables = res_asignables.json()
     assert len(asignables) == 3
-    assert any(a["value"] == "Facundo Bernard" and a["label"] == "Facundo Bernard" for a in asignables)
+    assert any(a["value"] == "facundo_bernard" and a["label"] == "Facundo Bernard" for a in asignables)
 
 def test_invalid_file_upload_rejected(client):
+    uid = uuid.uuid4().hex[:6]
     # Intentar crear un ticket adjuntando un PDF o archivo no soportado
     form_data = {
         "titulo": "Ticket con archivo inválido",
         "descripcion": "Intentando subir un PDF o script malicioso",
-        "correo": "seguridad@coopya.com"
+        "correo": f"seguridad_{uid}@coopya.com"
     }
     fake_pdf = b"%PDF-1.4 Fake PDF content"
     files = [

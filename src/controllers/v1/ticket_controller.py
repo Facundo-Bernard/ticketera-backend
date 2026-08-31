@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, status, UploadFile, File, Form, Query
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 from pydantic import EmailStr
 from beanie import PydanticObjectId
@@ -28,9 +28,12 @@ async def create_ticket(
         prioridad=prioridad,
         asignar=asignar
     )
+    # Filtrar solo archivos válidos con nombre
+    valid_files = [f for f in files if getattr(f, "filename", None)]
+
     return await service.create_ticket_with_rollback(
         ticket_in=ticket_in,
-        files=files,
+        files=valid_files if valid_files else None,
         gridfs_service=gridfs_service
     )
 
