@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from typing import List
-from ...schemas.catalog_schema import OptionItem, AsignableItem
+from ...schemas.catalog_schema import OptionItem
 from ...services.catalog_service import CatalogService
 
 router = APIRouter(prefix="/catalogs", tags=["Catálogos"])
@@ -13,6 +13,6 @@ def get_estados(service: CatalogService = Depends()):
 def get_prioridades(service: CatalogService = Depends()):
     return service.get_prioridades()
 
-@router.get("/asignables", response_model=List[AsignableItem], summary="Obtener lista de técnicos/áreas asignables")
+@router.get("/asignables", response_model=List[OptionItem], summary="Obtener lista de técnicos/usuarios asignables")
 async def get_asignables(service: CatalogService = Depends()):
     return await service.get_asignables()

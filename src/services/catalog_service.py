@@ -1,5 +1,5 @@
 from typing import List
-from ..schemas.catalog_schema import OptionItem, AsignableItem
+from ..schemas.catalog_schema import OptionItem
 from ..models.ticket_model import PrioridadEnum, EstadoEnum
 
 class CatalogService:
@@ -27,11 +27,10 @@ class CatalogService:
             for p in PrioridadEnum
         ]
 
-    async def get_asignables(self) -> List[AsignableItem]:
+    async def get_asignables(self) -> List[OptionItem]:
         return [
-            AsignableItem(id="soporte_tecnico", nombre="Soporte Técnico"),
-            AsignableItem(id="redes_infraestructura", nombre="Redes e Infraestructura"),
-            AsignableItem(id="administracion_sistemas", nombre="Administración de Sistemas"),
-            AsignableItem(id="desarrollo_software", nombre="Desarrollo de Software"),
-            AsignableItem(id="seguridad_informatica", nombre="Seguridad Informática")
+            OptionItem(value="Facundo Bernard", label="Facundo Bernard"),
+            OptionItem(value="Nicolas Gonzalez", label="Nicolas Gonzalez"),
+            OptionItem(value="Nahuel Monti", label="Nahuel Monti")
         ]
+

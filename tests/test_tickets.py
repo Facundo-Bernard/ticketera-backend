@@ -181,8 +181,8 @@ def test_catalog_endpoints(client):
     res_asignables = client.get("/api/v1/catalogs/asignables")
     assert res_asignables.status_code == 200
     asignables = res_asignables.json()
-    assert len(asignables) >= 3
-    assert any(a["id"] == "soporte_tecnico" for a in asignables)
+    assert len(asignables) == 3
+    assert any(a["value"] == "Facundo Bernard" and a["label"] == "Facundo Bernard" for a in asignables)
 
 def test_invalid_file_upload_rejected(client):
     # Intentar crear un ticket adjuntando un PDF o archivo no soportado
