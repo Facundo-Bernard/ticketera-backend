@@ -78,7 +78,6 @@ async def upload_ticket_images(
     image_urls = [f"/api/v1/files/{fid}" for fid in file_ids]
     return await ticket_service.add_images_to_ticket(id, image_urls)
 
-"""
 @router.delete("/{id}/images/{file_id}", response_model=TicketResponse, summary="Eliminar una imagen específica de un ticket y borrarla de GridFS")
 async def delete_ticket_image(
     id: PydanticObjectId,
@@ -87,7 +86,6 @@ async def delete_ticket_image(
     gridfs_service: GridFSService = Depends()
 ):
     return await ticket_service.remove_image_from_ticket(id, file_id, gridfs_service)
-"""
 
 """
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar ticket por ID y todas sus fotos asociadas")
