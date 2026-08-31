@@ -18,5 +18,8 @@ async def get_file(
     return StreamingResponse(
         file_iterator(),
         media_type=content_type,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'}
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "public, max-age=86400, immutable"
+        }
     )
