@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
+
+    # Límites de Seguridad y Rate Limiting
+    MAX_DAILY_TICKETS_PER_EMAIL: int = 8
+    TICKET_CREATION_COOLDOWN_SECONDS: int = 60
     
     model_config = SettingsConfigDict(
         env_file=".env",

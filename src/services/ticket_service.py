@@ -2,14 +2,57 @@ from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import Depends, UploadFile
 from beanie import PydanticObjectId
+from pymongo import ReturnDocument
 from ..repositories.ticket_repository import TicketRepository
 from ..schemas.ticket_schema import TicketCreate, TicketUpdate
 from ..models.ticket_model import Ticket
 from ..core.exceptions import NotFoundException
+from .rate_limit_service import RateLimitService
 
 class TicketService:
-    def __init__(self, repository: TicketRepository = Depends()):
+    def __init__(
+        self,
+        repository: TicketRepository = Depends(),
+        rate_limit_service: RateLimitService = Depends()
+    ):
         self.repository = repository
+        self.rate_limit_service = rate_limit_service
+
+    async def _generate_next_identifier(self) -> str:
+        """
+        Genera un identificador secuencial atómico (TCK-1001, TCK-1002, ...)
+        usando find_one_and_update en la colección 'counters' de MongoDB.
+        Es seguro ante concurrencia y no colisiona si se eliminan tickets.
+        """
+        db = Ticket.get_pymongo_collection().database
+        counter_col = db["counters"]
+
+        # 1. Asegurar que el contador esté sincronizado con el identificador más alto existente
+        existing_counter = await counter_col.find_one({"_id": "ticket_seq"})
+        if not existing_counter:
+            start_seq = 1000
+            last_ticket = await Ticket.find_all().sort("-identificador").limit(1).to_list()
+            if last_ticket and last_ticket[0].identificador:
+                try:
+                    num_part = int(last_ticket[0].identificador.split("-")[-1])
+                    if num_part >= start_seq:
+                        start_seq = num_part
+                except (ValueError, IndexError):
+                    pass
+
+            await counter_col.update_one(
+                {"_id": "ticket_seq"},
+                {"$set": {"seq": start_seq}},
+                upsert=True
+            )
+
+        # 2. Incrementar atómicamente
+        counter = await counter_col.find_one_and_update(
+            {"_id": "ticket_seq"},
+            {"$inc": {"seq": 1}},
+            return_document=ReturnDocument.AFTER
+        )
+        return f"TCK-{counter['seq']}"
 
     async def get_all_tickets(
         self,
@@ -28,8 +71,10 @@ class TicketService:
         return ticket
 
     async def create_ticket(self, ticket_in: TicketCreate) -> Ticket:
-        total_tickets = await self.repository.count()
-        identificador = f"TCK-{total_tickets + 1001}"
+        # Validar Rate Limit y Cooldown
+        await self.rate_limit_service.validate_ticket_creation(ticket_in.correo)
+
+        identificador = await self._generate_next_identifier()
         
         ticket_data = ticket_in.model_dump()
         ticket_data["identificador"] = identificador
@@ -43,6 +88,9 @@ class TicketService:
         files: Optional[List[UploadFile]] = None,
         gridfs_service = None
     ) -> Ticket:
+        # Validar Rate Limit y Cooldown ANTES de subir archivos a GridFS
+        await self.rate_limit_service.validate_ticket_creation(ticket_in.correo)
+
         uploaded_ids = []
         created_ticket = None
         try:
@@ -58,8 +106,7 @@ class TicketService:
             if ticket_in.imagenes:
                 image_urls.extend(ticket_in.imagenes)
 
-            total_tickets = await self.repository.count()
-            identificador = f"TCK-{total_tickets + 1001}"
+            identificador = await self._generate_next_identifier()
 
             ticket_data = ticket_in.model_dump()
             ticket_data["identificador"] = identificador
