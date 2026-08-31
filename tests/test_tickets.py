@@ -177,6 +177,21 @@ def test_catalog_endpoints(client):
     assert len(asignables) >= 3
     assert any(a["id"] == "soporte_tecnico" for a in asignables)
 
+def test_invalid_file_upload_rejected(client):
+    # Intentar crear un ticket adjuntando un PDF o archivo no soportado
+    form_data = {
+        "titulo": "Ticket con archivo inválido",
+        "descripcion": "Intentando subir un PDF o script malicioso",
+        "correo": "seguridad@coopya.com"
+    }
+    fake_pdf = b"%PDF-1.4 Fake PDF content"
+    files = [
+        ("files", ("documento.pdf", io.BytesIO(fake_pdf), "application/pdf"))
+    ]
+    res = client.post("/api/v1/tickets/", data=form_data, files=files)
+    assert res.status_code == 400
+    assert "no es una imagen válida" in res.json()["message"]
+
 if __name__ == "__main__":
     import sys
     print("Ejecutando suite de pruebas...")
@@ -189,4 +204,6 @@ if __name__ == "__main__":
         print(" [OK] test_ticket_filters")
         test_catalog_endpoints(test_client)
         print(" [OK] test_catalog_endpoints")
+        test_invalid_file_upload_rejected(test_client)
+        print(" [OK] test_invalid_file_upload_rejected")
     print("\n Todas las pruebas pasaron exitosamente!")

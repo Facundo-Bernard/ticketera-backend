@@ -17,7 +17,7 @@ async def create_ticket(
     correo: EmailStr = Form(..., description="Correo del solicitante"),
     prioridad: PrioridadEnum = Form(PrioridadEnum.MEDIA, description="Prioridad del ticket"),
     asignar: Optional[str] = Form(None, description="Técnico asignado (opcional)"),
-    files: List[UploadFile] = File(default=[], description="Uno o varios archivos/imágenes opcionales"),
+    files: List[UploadFile] = File(default=[], description="Solo archivos de imagen permitidos (PNG, JPEG, WebP, GIF, SVG)"),
     service: TicketService = Depends(),
     gridfs_service: GridFSService = Depends()
 ):
@@ -70,7 +70,7 @@ async def update_ticket(id: PydanticObjectId, ticket_in: TicketUpdate, service: 
 @router.post("/{id}/images", response_model=TicketResponse, summary="Adjuntar una o varias imágenes a un ticket mediante GridFS")
 async def upload_ticket_images(
     id: PydanticObjectId,
-    files: List[UploadFile] = File(..., description="Selecciona uno o varios archivos de imagen"),
+    files: List[UploadFile] = File(..., description="Selecciona archivos de imagen permitidos (PNG, JPEG, WebP, GIF, SVG)"),
     ticket_service: TicketService = Depends(),
     gridfs_service: GridFSService = Depends()
 ):
@@ -87,7 +87,6 @@ async def delete_ticket_image(
 ):
     return await ticket_service.remove_image_from_ticket(id, file_id, gridfs_service)
 
-"""
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar ticket por ID y todas sus fotos asociadas")
 async def delete_ticket(
     id: PydanticObjectId,
@@ -95,4 +94,3 @@ async def delete_ticket(
     gridfs_service: GridFSService = Depends()
 ):
     await service.delete_ticket(id, gridfs_service)
-"""
