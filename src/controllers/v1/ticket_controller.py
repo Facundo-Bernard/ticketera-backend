@@ -36,8 +36,8 @@ async def create_ticket(
 
 @router.get("/", response_model=List[TicketResponse], summary="Listar tickets con filtros y paginación")
 async def get_tickets(
-    fecha_desde: Optional[datetime] = Query(None, description="Fecha de inicio (ej: 2026-08-01T00:00:00)"),
-    fecha_hasta: Optional[datetime] = Query(None, description="Fecha fin (ej: 2026-08-31T23:59:59)"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha de inicio flexible (ej: 2026-08-01 o 2026-08-01T14:30:00)"),
+    fecha_hasta: Optional[str] = Query(None, description="Fecha fin flexible (ej: 2026-08-31 o 2026-08-31T23:59:59)"),
     estado: Optional[EstadoEnum] = Query(None, description="Filtrar por estado del ticket"),
     prioridad: Optional[PrioridadEnum] = Query(None, description="Filtrar por prioridad"),
     asignar: Optional[str] = Query(None, description="Filtrar por técnico/usuario asignado"),

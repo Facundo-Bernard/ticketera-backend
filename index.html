@@ -311,11 +311,11 @@
     <div class="filter-bar">
       <div class="filter-group">
         <label>📅 Fecha Desde:</label>
-        <input type="datetime-local" id="filtro-desde" class="form-control">
+        <input type="date" id="filtro-desde" class="form-control">
       </div>
       <div class="filter-group">
         <label>📅 Fecha Hasta:</label>
-        <input type="datetime-local" id="filtro-hasta" class="form-control">
+        <input type="date" id="filtro-hasta" class="form-control">
       </div>
       <div class="filter-group">
         <label>📌 Estado:</label>
@@ -360,8 +360,8 @@
       const asignar = document.getElementById("filtro-asignar").value.trim();
 
       const params = new URLSearchParams();
-      if (desde) params.append("fecha_desde", new Date(desde).toISOString());
-      if (hasta) params.append("fecha_hasta", new Date(hasta).toISOString());
+      if (desde) params.append("fecha_desde", desde);
+      if (hasta) params.append("fecha_hasta", hasta);
       if (estado) params.append("estado", estado);
       if (asignar) params.append("asignar", asignar);
 

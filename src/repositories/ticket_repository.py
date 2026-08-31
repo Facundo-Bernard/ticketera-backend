@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from .base_repository import BaseRepository
 from ..models.ticket_model import Ticket
 from ..schemas.ticket_schema import TicketCreate, TicketUpdate
+from ..core.date_utils import parse_date_filter
 
 class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
     def __init__(self):
@@ -24,14 +25,15 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
         if filters.get("asignar"):
             query["asignar"] = {"$regex": filters["asignar"], "$options": "i"}
             
-        fecha_desde = filters.get("fecha_desde")
-        fecha_hasta = filters.get("fecha_hasta")
-        if fecha_desde or fecha_hasta:
+        fecha_desde_parsed = parse_date_filter(filters.get("fecha_desde"), is_end_date=False)
+        fecha_hasta_parsed = parse_date_filter(filters.get("fecha_hasta"), is_end_date=True)
+
+        if fecha_desde_parsed or fecha_hasta_parsed:
             fecha_query = {}
-            if fecha_desde:
-                fecha_query["$gte"] = fecha_desde
-            if fecha_hasta:
-                fecha_query["$lte"] = fecha_hasta
+            if fecha_desde_parsed:
+                fecha_query["$gte"] = fecha_desde_parsed
+            if fecha_hasta_parsed:
+                fecha_query["$lte"] = fecha_hasta_parsed
             query["fecha_creacion"] = fecha_query
 
         return await self.model.find(query).sort("-fecha_creacion").skip(skip).limit(limit).to_list()

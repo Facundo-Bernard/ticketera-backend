@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime
 from beanie import PydanticObjectId
 from ..models.ticket_model import PrioridadEnum, EstadoEnum
@@ -22,8 +22,8 @@ class TicketUpdate(BaseModel):
     imagenes: Optional[List[str]] = None
 
 class TicketFilter(BaseModel):
-    fecha_desde: Optional[datetime] = None
-    fecha_hasta: Optional[datetime] = None
+    fecha_desde: Optional[Union[datetime, str]] = None
+    fecha_hasta: Optional[Union[datetime, str]] = None
     estado: Optional[EstadoEnum] = None
     prioridad: Optional[PrioridadEnum] = None
     asignar: Optional[str] = None
