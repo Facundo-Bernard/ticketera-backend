@@ -4,13 +4,9 @@ from ..core.exceptions import BadRequestException
 from ..config.settings import settings
 
 class RateLimitService:
-    def __init__(
-        self,
-        max_daily_tickets: int = settings.MAX_DAILY_TICKETS_PER_EMAIL,
-        cooldown_seconds: int = settings.TICKET_CREATION_COOLDOWN_SECONDS
-    ):
-        self.max_daily_tickets = max_daily_tickets
-        self.cooldown_seconds = cooldown_seconds
+    def __init__(self):
+        self.max_daily_tickets: int = settings.MAX_DAILY_TICKETS_PER_EMAIL
+        self.cooldown_seconds: int = settings.TICKET_CREATION_COOLDOWN_SECONDS
 
     async def validate_ticket_creation(self, correo: str) -> None:
         """
