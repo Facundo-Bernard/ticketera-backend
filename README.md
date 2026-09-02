@@ -2,6 +2,8 @@
 
 Backend robusto para la gestión y seguimiento de tickets de soporte con almacenamiento nativo de imágenes en **MongoDB GridFS**, arquitectura en capas y soporte de **Rollback automático**.
 
+> Copia mantenida para despliegue en Railway.
+
 ---
 
 ## 🛠️ Tecnologías Utilizadas
