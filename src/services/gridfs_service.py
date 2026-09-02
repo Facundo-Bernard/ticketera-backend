@@ -30,7 +30,7 @@ class GridFSService:
     def _get_bucket(self) -> AsyncIOMotorGridFSBucket:
         if self._bucket is None:
             self._client = AsyncIOMotorClient(settings.MONGO_URI)
-            db = self._client.get_default_database()
+            db = self._client[settings.MONGO_DB_NAME]
             self._bucket = AsyncIOMotorGridFSBucket(db)
         return self._bucket
 

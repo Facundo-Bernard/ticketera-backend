@@ -2,6 +2,7 @@ from beanie import init_beanie, Document
 from typing import List, Type
 from .settings import settings
 import logging
+from motor.motor_asyncio import AsyncIOMotorClient
 
 logger = logging.getLogger(__name__)
 
@@ -10,8 +11,9 @@ async def init_db(models: List[Type[Document]] = None):
         models = []
         
     try:
+        client = AsyncIOMotorClient(settings.MONGO_URI)
         await init_beanie(
-            connection_string=settings.MONGO_URI,
+            database=client[settings.MONGO_DB_NAME],
             document_models=models,
             allow_index_dropping=True
         )
