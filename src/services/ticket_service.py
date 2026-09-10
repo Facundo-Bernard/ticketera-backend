@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime, timezone
-from fastapi import Depends, UploadFile
+from fastapi import Depends, UploadFile, HTTPException, status
 from beanie import PydanticObjectId
 from pymongo import ReturnDocument
 from ..repositories.ticket_repository import TicketRepository
@@ -8,6 +8,7 @@ from ..schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse
 from ..models.ticket_model import Ticket
 from ..core.exceptions import NotFoundException
 from ..core.sse_manager import sse_manager
+from ..core.ticket_lock_manager import ticket_lock_manager
 from .rate_limit_service import RateLimitService
 
 class TicketService:
@@ -145,12 +146,29 @@ class TicketService:
         ticket = await self.get_ticket(id)
         ticket.leido = True
         await ticket.save()
+        try:
+            ticket_resp = TicketResponse.model_validate(ticket)
+            await sse_manager.broadcast("ticket_actualizado", ticket_resp.model_dump(mode="json"))
+        except Exception:
+            pass
         return ticket
 
     async def update_ticket(self, id: PydanticObjectId, ticket_in: TicketUpdate) -> Ticket:
         ticket = await self.repository.update(id, ticket_in)
         if not ticket:
             raise NotFoundException(f"Ticket con id {id} no encontrado")
+
+        # 1. Liberar bloqueo de edición si existía
+        ticket_lock_manager.release_lock(str(id))
+
+        # 2. Notificar a todas las pantallas vía SSE
+        try:
+            ticket_resp = TicketResponse.model_validate(ticket)
+            await sse_manager.broadcast("ticket_actualizado", ticket_resp.model_dump(mode="json"))
+            await sse_manager.broadcast("ticket_desbloqueado", {"ticket_id": str(id)})
+        except Exception:
+            pass
+
         return ticket
 
     async def add_image_to_ticket(self, id: PydanticObjectId, image_id_or_url: str) -> Ticket:
@@ -166,6 +184,11 @@ class TicketService:
         if modified:
             ticket.fecha_edicion = datetime.now(timezone.utc)
             await ticket.save()
+            try:
+                ticket_resp = TicketResponse.model_validate(ticket)
+                await sse_manager.broadcast("ticket_actualizado", ticket_resp.model_dump(mode="json"))
+            except Exception:
+                pass
         return ticket
 
     async def remove_image_from_ticket(
@@ -199,12 +222,28 @@ class TicketService:
                 await gridfs_service.delete_file(file_id)
             except Exception:
                 pass
+
+        try:
+            ticket_resp = TicketResponse.model_validate(ticket)
+            await sse_manager.broadcast("ticket_actualizado", ticket_resp.model_dump(mode="json"))
+        except Exception:
+            pass
                 
         return ticket
 
     async def delete_ticket(self, id: PydanticObjectId, gridfs_service = None) -> bool:
         ticket = await self.get_ticket(id)
+        identificador = getattr(ticket, "identificador", str(id))
         
+        # 1. Verificar si el ticket está siendo editado en este momento
+        current_lock = ticket_lock_manager.is_locked(str(id))
+        if current_lock:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar el ticket porque está siendo editado por {current_lock.usuario}",
+                headers={"X-Locked-By": current_lock.usuario}
+            )
+
         # Eliminar todas sus imágenes de GridFS
         if gridfs_service and ticket.imagenes:
             for img_url in ticket.imagenes:
@@ -217,4 +256,17 @@ class TicketService:
         success = await self.repository.delete(id)
         if not success:
             raise NotFoundException(f"Ticket con id {id} no encontrado")
+
+        # 1. Liberar bloqueo si existía
+        ticket_lock_manager.release_lock(str(id))
+
+        # 2. Notificar a todas las pantallas vía SSE
+        try:
+            await sse_manager.broadcast("ticket_eliminado", {
+                "id": str(id),
+                "identificador": identificador
+            })
+        except Exception:
+            pass
+
         return True

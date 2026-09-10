@@ -1,10 +1,10 @@
 import asyncio
 import json
-from fastapi import APIRouter, Depends, status, UploadFile, File, Form, Query, Request
+from fastapi import APIRouter, Depends, status, UploadFile, File, Form, Query, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import List, Optional, Union
 from datetime import datetime
-from pydantic import EmailStr
+from pydantic import EmailStr, BaseModel, Field
 from beanie import PydanticObjectId
 from ...schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse
 from ...models.ticket_model import PrioridadEnum, EstadoEnum, Frecuencia
@@ -12,6 +12,13 @@ from ...services.ticket_service import TicketService
 from ...services.gridfs_service import GridFSService
 from ...core.exceptions import BadRequestException
 from ...core.sse_manager import sse_manager
+from ...core.ticket_lock_manager import ticket_lock_manager
+
+class LockRequest(BaseModel):
+    usuario: str = Field(..., min_length=1, description="Nombre o correo del operador que solicita el bloqueo")
+
+class UnlockRequest(BaseModel):
+    usuario: Optional[str] = Field(None, description="Nombre o correo del operador que libera el bloqueo (opcional)")
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
@@ -123,6 +130,73 @@ async def get_tickets(
 @router.patch("/{id}/read", response_model=TicketResponse, summary="Marcar ticket como leído")
 async def mark_ticket_as_read(id: PydanticObjectId, service: TicketService = Depends()):
     return await service.mark_as_read(id)
+
+@router.post("/{id}/bloquear", summary="Bloquear ticket para edición exclusiva (evita colisiones concurrentes)")
+async def lock_ticket(
+    id: PydanticObjectId,
+    payload: LockRequest,
+    service: TicketService = Depends()
+):
+    ticket = await service.get_ticket(id)
+    success, lock_info = ticket_lock_manager.acquire_lock(str(id), payload.usuario)
+    if not success and lock_info:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"El ticket está siendo editado por {lock_info.usuario}",
+            headers={"X-Locked-By": lock_info.usuario}
+        )
+
+    # Notificar a todas las pantallas vía SSE
+    try:
+        await sse_manager.broadcast("ticket_bloqueado", {
+            "ticket_id": str(id),
+            "identificador": getattr(ticket, "identificador", str(id)),
+            "usuario": payload.usuario,
+            "expira_en_segundos": ticket_lock_manager.ttl_seconds
+        })
+    except Exception:
+        pass
+
+    return {
+        "status": "bloqueado",
+        "ticket_id": str(id),
+        "usuario": payload.usuario,
+        "expira_en_segundos": ticket_lock_manager.ttl_seconds
+    }
+
+@router.post("/{id}/desbloquear", summary="Liberar bloqueo de edición de un ticket")
+async def unlock_ticket(
+    id: PydanticObjectId,
+    payload: Optional[UnlockRequest] = None,
+    service: TicketService = Depends()
+):
+    usuario = payload.usuario if payload else None
+    ticket_lock_manager.release_lock(str(id), usuario)
+
+    # Notificar a todas las pantallas vía SSE
+    try:
+        await sse_manager.broadcast("ticket_desbloqueado", {
+            "ticket_id": str(id)
+        })
+    except Exception:
+        pass
+
+    return {"status": "desbloqueado", "ticket_id": str(id)}
+
+@router.get("/{id}/bloqueo", summary="Consultar estado de bloqueo de un ticket")
+async def get_ticket_lock_status(
+    id: PydanticObjectId,
+    service: TicketService = Depends()
+):
+    await service.get_ticket(id)
+    lock = ticket_lock_manager.is_locked(str(id))
+    if not lock:
+        return {"bloqueado": False}
+    return {
+        "bloqueado": True,
+        "usuario": lock.usuario,
+        "expira_en": lock.expira_en.isoformat()
+    }
 
 @router.get("/{id}", response_model=TicketResponse, summary="Obtener ticket por ID")
 async def get_ticket(id: PydanticObjectId, service: TicketService = Depends()):

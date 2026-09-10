@@ -377,6 +377,168 @@ def test_sse_broadcast_on_ticket_creation(client):
     finally:
         sse_manager.unsubscribe(queue)
 
+def test_ticket_lock_manager_logic():
+    from src.core.ticket_lock_manager import TicketLockManager
+    import time
+    from datetime import timedelta
+
+    manager = TicketLockManager(ttl_seconds=1)
+    
+    # 1. Adquirir lock exitosamente
+    success, lock = manager.acquire_lock("tck-1", "operador_a")
+    assert success is True
+    assert lock.usuario == "operador_a"
+    assert manager.is_locked("tck-1") is not None
+
+    # 2. Otro operador intenta adquirirlo -> Rechazado
+    success_b, lock_b = manager.acquire_lock("tck-1", "operador_b")
+    assert success_b is False
+    assert lock_b.usuario == "operador_a"
+
+    # 3. Mismo operador renueva lock
+    success_a2, lock_a2 = manager.acquire_lock("tck-1", "operador_a")
+    assert success_a2 is True
+
+    # 4. Liberar lock
+    released = manager.release_lock("tck-1", "operador_a")
+    assert released is True
+    assert manager.is_locked("tck-1") is None
+
+    # 5. Adquirir después de liberar
+    success_b2, lock_b2 = manager.acquire_lock("tck-1", "operador_b")
+    assert success_b2 is True
+    assert lock_b2.usuario == "operador_b"
+
+    # 6. TTL expiración
+    manager.release_lock("tck-1")
+    manager.acquire_lock("tck-exp", "operador_x")
+    time.sleep(1.1)
+    assert manager.is_locked("tck-exp") is None
+
+def test_concurrency_lock_endpoints(client):
+    from src.core.ticket_lock_manager import ticket_lock_manager
+    ticket_lock_manager.clear()
+
+    # 1. Crear un ticket
+    uid = uuid.uuid4().hex[:6]
+    res = client.post("/api/v1/tickets/", data={
+        "titulo": "Ticket para Test de Bloqueo",
+        "descripcion": "Probando endpoints de bloqueo",
+        "correo": f"lock_{uid}@coopya.com"
+    })
+    assert res.status_code == 201
+    ticket_id = res.json()["id"]
+
+    # 2. Consultar estado inicial -> no bloqueado
+    status_res = client.get(f"/api/v1/tickets/{ticket_id}/bloqueo")
+    assert status_res.status_code == 200
+    assert status_res.json()["bloqueado"] is False
+
+    # 3. Operador A bloquea el ticket -> 200 OK
+    lock_res_a = client.post(f"/api/v1/tickets/{ticket_id}/bloquear", json={"usuario": "facundo@coopya.com"})
+    assert lock_res_a.status_code == 200
+    assert lock_res_a.json()["status"] == "bloqueado"
+    assert lock_res_a.json()["usuario"] == "facundo@coopya.com"
+
+    # 4. Consultar estado -> bloqueado por Operador A
+    status_res2 = client.get(f"/api/v1/tickets/{ticket_id}/bloqueo")
+    assert status_res2.status_code == 200
+    assert status_res2.json()["bloqueado"] is True
+    assert status_res2.json()["usuario"] == "facundo@coopya.com"
+
+    # 5. Operador B intenta bloquearlo -> 409 Conflict
+    lock_res_b = client.post(f"/api/v1/tickets/{ticket_id}/bloquear", json={"usuario": "nahuel@coopya.com"})
+    assert lock_res_b.status_code == 409
+    assert "Facundo" in lock_res_b.json()["detail"] or "facundo@coopya.com" in lock_res_b.json()["detail"]
+
+    # 6. Operador A libera el bloqueo
+    unlock_res = client.post(f"/api/v1/tickets/{ticket_id}/desbloquear", json={"usuario": "facundo@coopya.com"})
+    assert unlock_res.status_code == 200
+    assert unlock_res.json()["status"] == "desbloqueado"
+
+    # 7. Ahora Operador B puede bloquearlo
+    lock_res_b2 = client.post(f"/api/v1/tickets/{ticket_id}/bloquear", json={"usuario": "nahuel@coopya.com"})
+    assert lock_res_b2.status_code == 200
+    assert lock_res_b2.json()["usuario"] == "nahuel@coopya.com"
+
+    # 8. Al actualizar el ticket vía PATCH, se libera automáticamente
+    patch_res = client.patch(f"/api/v1/tickets/{ticket_id}", json={"prioridad": "alta"})
+    assert patch_res.status_code == 200
+    status_res3 = client.get(f"/api/v1/tickets/{ticket_id}/bloqueo")
+    assert status_res3.json()["bloqueado"] is False
+
+    # 9. Si el ticket está bloqueado, intentar eliminarlo debe retornar 409 Conflict
+    client.post(f"/api/v1/tickets/{ticket_id}/bloquear", json={"usuario": "nahuel@coopya.com"})
+    del_res_conflict = client.delete(f"/api/v1/tickets/{ticket_id}")
+    assert del_res_conflict.status_code == 409
+    assert "nahuel@coopya.com" in del_res_conflict.json()["detail"]
+
+    # 10. Una vez desbloqueado, se puede eliminar normalmente
+    client.post(f"/api/v1/tickets/{ticket_id}/desbloquear", json={"usuario": "nahuel@coopya.com"})
+    del_res_ok = client.delete(f"/api/v1/tickets/{ticket_id}")
+    assert del_res_ok.status_code == 204
+
+def test_sse_events_on_update_delete_and_lock(client):
+    import asyncio
+    from src.core.sse_manager import sse_manager
+    from src.core.ticket_lock_manager import ticket_lock_manager
+    ticket_lock_manager.clear()
+
+    loop = asyncio.get_event_loop() if not asyncio.get_event_loop().is_closed() else asyncio.new_event_loop()
+    queue = loop.run_until_complete(sse_manager.subscribe())
+
+    uid = uuid.uuid4().hex[:6]
+    try:
+        # 1. Crear ticket -> evento nuevo_ticket
+        res = client.post("/api/v1/tickets/", data={
+            "titulo": "Ticket eventos SSE",
+            "descripcion": "Verificar todos los eventos emitidos",
+            "correo": f"events_{uid}@coopya.com"
+        })
+        assert res.status_code == 201
+        ticket = res.json()
+        ticket_id = ticket["id"]
+
+        ev_nuevo = queue.get_nowait()
+        assert ev_nuevo["event"] == "nuevo_ticket"
+
+        # 2. Bloquear ticket -> evento ticket_bloqueado
+        client.post(f"/api/v1/tickets/{ticket_id}/bloquear", json={"usuario": "admin@coopya.com"})
+        ev_lock = queue.get_nowait()
+        assert ev_lock["event"] == "ticket_bloqueado"
+        assert ev_lock["data"]["ticket_id"] == ticket_id
+        assert ev_lock["data"]["usuario"] == "admin@coopya.com"
+
+        # 3. Desbloquear ticket -> evento ticket_desbloqueado
+        client.post(f"/api/v1/tickets/{ticket_id}/desbloquear", json={"usuario": "admin@coopya.com"})
+        ev_unlock = queue.get_nowait()
+        assert ev_unlock["event"] == "ticket_desbloqueado"
+        assert ev_unlock["data"]["ticket_id"] == ticket_id
+
+        # 4. Actualizar ticket vía PATCH -> eventos ticket_actualizado y ticket_desbloqueado
+        client.patch(f"/api/v1/tickets/{ticket_id}", json={"titulo": "Título Modificado"})
+        ev_upd = queue.get_nowait()
+        assert ev_upd["event"] == "ticket_actualizado"
+        assert ev_upd["data"]["titulo"] == "Título Modificado"
+
+        ev_unl2 = queue.get_nowait()
+        assert ev_unl2["event"] == "ticket_desbloqueado"
+
+        # 5. Marcar como leído -> evento ticket_actualizado
+        client.patch(f"/api/v1/tickets/{ticket_id}/read")
+        ev_read = queue.get_nowait()
+        assert ev_read["event"] == "ticket_actualizado"
+        assert ev_read["data"]["leido"] is True
+
+        # 6. Eliminar ticket -> evento ticket_eliminado
+        client.delete(f"/api/v1/tickets/{ticket_id}")
+        ev_del = queue.get_nowait()
+        assert ev_del["event"] == "ticket_eliminado"
+        assert ev_del["data"]["id"] == ticket_id
+        assert ev_del["data"]["identificador"] == ticket["identificador"]
+    finally:
+        sse_manager.unsubscribe(queue)
+
 if __name__ == "__main__":
     import sys
     print("Ejecutando suite de pruebas...")
