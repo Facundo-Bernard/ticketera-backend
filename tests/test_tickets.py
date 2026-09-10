@@ -415,6 +415,14 @@ def test_ticket_lock_manager_logic():
     time.sleep(1.1)
     assert manager.is_locked("tck-exp") is None
 
+    # 7. Obtener bloqueos activos (get_active_locks)
+    manager.acquire_lock('tck-live', 'operador_live')
+    active = manager.get_active_locks()
+    assert 'tck-live' in active
+    assert active['tck-live'].usuario == 'operador_live'
+    time.sleep(1.1)
+    assert len(manager.get_active_locks()) == 0
+
 def test_concurrency_lock_endpoints(client):
     from src.core.ticket_lock_manager import ticket_lock_manager
     ticket_lock_manager.clear()

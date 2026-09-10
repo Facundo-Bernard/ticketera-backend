@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Depends, status, UploadFile, File, Form, Query, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import List, Optional, Union
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import EmailStr, BaseModel, Field
 from beanie import PydanticObjectId
 from ...schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse
@@ -73,6 +73,17 @@ async def ticket_stream(request: Request):
     async def event_generator():
         queue = await sse_manager.subscribe()
         try:
+            # Emitir inmediatamente al cliente recien conectado todos los bloqueos activos
+            active_locks = ticket_lock_manager.get_active_locks()
+            for t_id, lock in active_locks.items():
+                expira_segundos = max(0, int((lock.expira_en - datetime.now(timezone.utc)).total_seconds()))
+                payload = {
+                    "ticket_id": str(t_id),
+                    "usuario": lock.usuario,
+                    "expira_en_segundos": expira_segundos
+                }
+                yield f"event: ticket_bloqueado\ndata: {json.dumps(payload)}\n\n"
+
             while True:
                 if await request.is_disconnected():
                     break

@@ -74,6 +74,20 @@ class TicketLockManager:
         self._locks.pop(t_id, None)
         return True
 
+    def get_active_locks(self) -> Dict[str, LockInfo]:
+        """Retorna todos los locks activos no expirados y limpia los vencidos."""
+        now = self._now()
+        active = {}
+        expired_keys = []
+        for t_id, lock in self._locks.items():
+            if now > lock.expira_en:
+                expired_keys.append(t_id)
+            else:
+                active[t_id] = lock
+        for k in expired_keys:
+            del self._locks[k]
+        return active
+
     def clear(self) -> None:
         """Limpia todos los bloqueos en memoria (útil para testing)."""
         self._locks.clear()
