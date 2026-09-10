@@ -22,10 +22,87 @@ En este sistema, los documentos de base de datos (`src/models/`) **nunca se expo
 1. **Seguridad y Encapsulamiento**: Control estricto de qué campos son de solo lectura, cuáles se pueden crear y cuáles se pueden modificar.
 2. **Validaciones en Entrada**: Pydantic v2 valida tipos, rangos, longitudes y formatos de email antes de que cualquier dato llegue a la capa de servicios o base de datos.
 3. **Serialización Estandarizada**: Formatea fechas en UTC con sufijo `Z` y transforma IDs de MongoDB (`PydanticObjectId`) a strings limpios compatibles con JSON.
+4. **Protección contra Inyección**: Configuración `extra='forbid'` rechaza campos adicionales no especificados, previniendo ataques de inyección de campos maliciosos.
+5. **Sanitización Automática**: `str_strip_whitespace=True` elimina espacios en blanco automáticamente, previniendo inputs maliciosos como " usuario ".
 
 ---
 
-## 📄 Descripción Detallada de Módulos
+## � Validaciones de Seguridad y Calidad de Datos
+
+### Configuración Global de Seguridad
+Todos los esquemas de entrada (`TicketCreate`, `TicketUpdate`) incluyen configuraciones de seguridad en Pydantic v2:
+
+```python
+model_config = ConfigDict(
+    extra='forbid',  # Rechaza campos adicionales no especificados
+    str_strip_whitespace=True  # Elimina espacios en blanco de strings automáticamente
+)
+```
+
+**Beneficios de seguridad:**
+- **`extra='forbid'`**: Previene inyección de campos no esperados que podrían causar comportamientos indeseados
+- **`str_strip_whitespace=True`**: Elimina espacios en blanco al inicio/final, previniendo inputs como " usuario " que causan problemas de validación
+
+### Validadores Personalizados Pydantic v2
+
+#### 1. Validador de Título
+```python
+@field_validator('titulo')
+@classmethod
+def validate_titulo(cls, v: str) -> str:
+    if not v.strip():
+        raise ValueError('El título no puede estar vacío o contener solo espacios')
+    return v
+```
+- Previene títulos como "   " que pasan la validación de longitud pero no tienen contenido real
+- Asegura calidad de datos en la base de datos
+
+#### 2. Validador de Imágenes
+```python
+@field_validator('imagenes')
+@classmethod
+def validate_imagenes(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+    if v:
+        if len(v) > 10:
+            raise ValueError('Máximo 10 imágenes permitidas por ticket')
+        for url in v:
+            if not url.strip():
+                raise ValueError('Las URLs de imagen no pueden estar vacías')
+    return v
+```
+- Previene ataques DoS por listas de imágenes excesivamente grandes
+- Valida que no haya URLs vacías en la lista
+- Limita el consumo de almacenamiento y memoria
+
+#### 3. Validador de Consistencia
+```python
+@model_validator(mode='after')
+def validate_consistencia(cls, model: 'TicketCreate') -> 'TicketCreate':
+    if model.frecuencia:
+        if model.frecuencia.numero < 1:
+            raise ValueError('El número de frecuencia debe ser al menos 1')
+    return model
+```
+- Valida relaciones entre campos relacionados
+- Previene combinaciones inválidas de datos
+- Usa el modo 'after' de Pydantic v2 para validación post-campo
+
+### Restricciones de Longitud Mejoradas
+
+| Campo | Longitud Mínima | Longitud Máxima | Propósito |
+| :--- | :---: | :---: | :--- |
+| `titulo` | 3 | 150 | Previene títulos demasiado cortos o largos |
+| `descripcion` | 10 | 5000 | Asegura descripciones significativas, previene DoS |
+| `asignar` | 1 | 100 | Previene strings vacíos y limita longitud |
+
+**Beneficios:**
+- Previene datos de baja calidad en la base de datos
+- Limita el tamaño de payloads para prevenir ataques DoS
+- Mejora la consistencia y usabilidad de los datos
+
+---
+
+## �📄 Descripción Detallada de Módulos
 
 ### 1. 🧱 `catalog_schema.py` — Esquemas de Catálogos
 
