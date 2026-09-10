@@ -200,19 +200,73 @@ Base URL: `http://localhost:8000/api/v1`
 
 #### `PATCH /api/v1/tickets/{id}/read` — Marcar Ticket como Leído
 > **Método**: `PATCH`  
-> Actualiza el flag `leido = true` cuando un operador abre o visualiza el ticket en el frontend.
+> Actualiza el flag `leido = true` cuando un operador abre o visualiza el ticket en el frontend (emite evento SSE `ticket_actualizado`).
 
 **Respuesta (`200 OK`)**: Objeto `TicketResponse` con `leido: true`.
+
+---
+
+#### `POST /api/v1/tickets/{id}/bloquear` — Bloquear Ticket para Edición Exclusiva
+> **Método**: `POST`  
+> **Content-Type**: `application/json`  
+> Bloquea el ticket temporalmente con TTL de 3 minutos (180 segundos) para evitar que dos operadores editen a la vez.
+
+**Payload**:
+```json
+{
+  "usuario": "facundo@coopya.com"
+}
+```
+
+- **Respuesta (`200 OK`)**: `{"status": "bloqueado", "ticket_id": "...", "usuario": "facundo@coopya.com", "expira_en_segundos": 180}` (Emite evento SSE `ticket_bloqueado`).
+- **Respuesta (`409 Conflict`)**: Si ya está bloqueado por otro operador activo:
+  ```json
+  {
+    "detail": "El ticket está siendo editado por facundo@coopya.com"
+  }
+  ```
+
+---
+
+#### `POST /api/v1/tickets/{id}/desbloquear` — Liberar Bloqueo de Edición
+> **Método**: `POST`  
+> **Content-Type**: `application/json`  
+> Libera el bloqueo al cancelar o cerrar el modal de edición (emite evento SSE `ticket_desbloqueado`).
+
+**Payload (opcional)**:
+```json
+{
+  "usuario": "facundo@coopya.com"
+}
+```
+
+**Respuesta (`200 OK`)**: `{"status": "desbloqueado", "ticket_id": "..."}`.
+
+---
+
+#### `GET /api/v1/tickets/{id}/bloqueo` — Consultar Estado de Bloqueo
+- **Respuesta (`200 OK`)**:
+  - `{"bloqueado": false}`
+  - `{"bloqueado": true, "usuario": "facundo@coopya.com", "expira_en": "2026-09-10T14:35:00Z"}`
 
 ---
 
 #### `GET /api/v1/tickets/stream` — Canal en Tiempo Real (Server-Sent Events - SSE)
 > **Método**: `GET`  
 > **Content-Type**: `text/event-stream`  
-> Conexión persistente unidireccional (ligera, nativa de HTTP/FastAPI) que emite un evento cada vez que entra un nuevo ticket a la base de datos.
-> Envía periódicamente `: ping\n\n` como keep-alive para evitar que proxies o Railway cierren la conexión por inactividad.
+> Conexión persistente unidireccional (ligera, nativa de HTTP/FastAPI) que sincroniza en tiempo real la creación, edición, eliminación y bloqueo de tickets para todos los tableros Kanban.
+> Envía periódicamente `: ping\n\n` cada 15 segundos como keep-alive.
 
-**Ejemplo de Integración en Frontend (React / JavaScript Nativo) con Notificaciones de Escritorio**:
+**Eventos SSE Emitidos**:
+| Evento | Cuándo se emite | Payload (JSON) |
+| :--- | :--- | :--- |
+| `nuevo_ticket` | Al crear un ticket | Objeto completo `TicketResponse` |
+| `ticket_actualizado` | Al editar (`PATCH`), marcar leído o cambiar imágenes | Objeto completo `TicketResponse` actualizado |
+| `ticket_eliminado` | Al eliminar un ticket (`DELETE`) | `{"id": "...", "identificador": "TCK-..."}` |
+| `ticket_bloqueado` | Al solicitar bloqueo (`POST /bloquear`) | `{"ticket_id": "...", "identificador": "TCK-...", "usuario": "...", "expira_en_segundos": 180}` |
+| `ticket_desbloqueado`| Al guardar, cancelar o expirar (`POST /desbloquear`) | `{"ticket_id": "..."}` |
+
+**Ejemplo de Integración en Frontend (React / JavaScript Nativo)**:
 ```javascript
 // 1. Solicitar permiso para notificaciones de escritorio al cargar
 if ("Notification" in window && Notification.permission === "default") {
@@ -222,28 +276,49 @@ if ("Notification" in window && Notification.permission === "default") {
 // 2. Conectar al canal SSE
 const eventSource = new EventSource("http://localhost:8000/api/v1/tickets/stream");
 
-eventSource.onmessage = (event) => {
-  const newTicket = JSON.parse(event.data);
-  console.log("Nuevo ticket recibido en tiempo real:", newTicket);
+// A. Escuchar nuevo ticket
+eventSource.addEventListener("nuevo_ticket", (e) => {
+  const newTicket = JSON.parse(e.data);
+  setTickets(prev => [newTicket, ...prev]);
 
-  // Actualizar estado / tablero en React (ej: prepend a la lista)
-  // setTickets(prev => [newTicket, ...prev]);
-
-  // Mostrar notificación nativa de escritorio
   if ("Notification" in window && Notification.permission === "granted") {
     new Notification(`🎫 Nuevo Ticket: ${newTicket.identificador}`, {
       body: `${newTicket.titulo} - Solicitante: ${newTicket.correo}`,
       icon: "/logo.png"
     });
   }
-};
+});
+
+// B. Escuchar ticket actualizado (edición, movimiento de columna o cambio de estado)
+eventSource.addEventListener("ticket_actualizado", (e) => {
+  const updatedTicket = JSON.parse(e.data);
+  setTickets(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
+});
+
+// C. Escuchar ticket eliminado
+eventSource.addEventListener("ticket_eliminado", (e) => {
+  const { id } = JSON.parse(e.data);
+  setTickets(prev => prev.filter(t => t.id !== id));
+});
+
+// D. Escuchar bloqueos y desbloqueos
+eventSource.addEventListener("ticket_bloqueado", (e) => {
+  const { ticket_id, usuario } = JSON.parse(e.data);
+  setLocks(prev => ({ ...prev, [ticket_id]: usuario }));
+});
+
+eventSource.addEventListener("ticket_desbloqueado", (e) => {
+  const { ticket_id } = JSON.parse(e.data);
+  setLocks(prev => {
+    const next = { ...prev };
+    delete next[ticket_id];
+    return next;
+  });
+});
 
 eventSource.onerror = (err) => {
-  console.error("Error en conexión SSE, el navegador reconectará automáticamente:", err);
+  console.error("Conexión SSE reconectando automáticamente...", err);
 };
-
-// Cerrar conexión al desmontar componente:
-// eventSource.close();
 ```
 
 ---
