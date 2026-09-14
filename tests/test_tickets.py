@@ -203,19 +203,48 @@ def test_catalog_endpoints(client):
 
 def test_invalid_file_upload_rejected(client):
     uid = uuid.uuid4().hex[:6]
-    # Intentar crear un ticket adjuntando un PDF o archivo no soportado
+    # Intentar crear un ticket adjuntando un binario/ejecutable no soportado (.exe)
     form_data = {
         "titulo": "Ticket con archivo inválido",
-        "descripcion": "Intentando subir un PDF o script malicioso",
+        "descripcion": "Intentando subir un binario ejecutable",
         "correo": f"seguridad_{uid}@coopya.com"
     }
-    fake_pdf = b"%PDF-1.4 Fake PDF content"
+    fake_exe = b"MZ\x90\x00\x03\x00\x00\x00Fake Executable Binary"
     files = [
-        ("files", ("documento.pdf", io.BytesIO(fake_pdf), "application/pdf"))
+        ("files", ("malware.exe", io.BytesIO(fake_exe), "application/x-msdownload"))
     ]
     res = client.post("/api/v1/tickets/", data=form_data, files=files)
     assert res.status_code == 400
-    assert "no es una imagen válida" in res.json()["message"]
+    assert "no tiene un formato permitido" in res.json()["message"]
+
+def test_allowed_document_types_upload(client):
+    uid = uuid.uuid4().hex[:6]
+    form_data = {
+        "titulo": "Ticket con adjuntos PDF, CSV, XLSX y TXT",
+        "descripcion": "Adjuntando reportes y archivos de texto",
+        "correo": f"doc_upload_{uid}@coopya.com"
+    }
+    fake_pdf = b"%PDF-1.4 Fake PDF Content"
+    fake_csv = b"id,nombre,valor\n1,Prueba,100\n"
+    fake_xlsx = b"PK\x03\x04Fake Excel Binary Content"
+    fake_txt = b"Texto plano de diagnostico de sistema\n"
+
+    files = [
+        ("files", ("reporte.pdf", io.BytesIO(fake_pdf), "application/pdf")),
+        ("files", ("datos.csv", io.BytesIO(fake_csv), "text/csv")),
+        ("files", ("planilla.xlsx", io.BytesIO(fake_xlsx), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+        ("files", ("notas.txt", io.BytesIO(fake_txt), "text/plain"))
+    ]
+    res = client.post("/api/v1/tickets/", data=form_data, files=files)
+    assert res.status_code == 201, f"Error: {res.text}"
+    ticket = res.json()
+    assert len(ticket["imagenes"]) == 4
+
+    # Verificar que cada archivo se puede consultar y tiene su Content-Type adecuado
+    for file_url in ticket["imagenes"]:
+        file_res = client.get(file_url)
+        assert file_res.status_code == 200
+        assert "Content-Disposition" in file_res.headers
 
 def test_atomic_sequence_no_collision_on_delete(client):
     uid = uuid.uuid4().hex[:6]

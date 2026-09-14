@@ -7,7 +7,8 @@ from typing import Optional, Tuple, List
 from ..config.settings import settings
 from ..core.exceptions import NotFoundException, BadRequestException
 
-ALLOWED_IMAGE_TYPES = {
+ALLOWED_FILE_TYPES = {
+    # Imágenes
     "image/jpeg",
     "image/jpg",
     "image/png",
@@ -15,12 +16,45 @@ ALLOWED_IMAGE_TYPES = {
     "image/gif",
     "image/avif",
     "image/bmp",
-    "image/svg+xml"
+    "image/svg+xml",
+    # Documentos
+    "application/pdf",
+    "text/csv",
+    "application/csv",
+    "text/plain",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 }
 
-ALLOWED_IMAGE_EXTENSIONS = {
-    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp", ".svg"
+ALLOWED_FILE_EXTENSIONS = {
+    # Imágenes
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp", ".svg",
+    # Documentos
+    ".pdf", ".csv", ".xlsx", ".xls", ".txt"
 }
+
+# Aliases de compatibilidad hacia atrás
+ALLOWED_IMAGE_TYPES = ALLOWED_FILE_TYPES
+ALLOWED_IMAGE_EXTENSIONS = ALLOWED_FILE_EXTENSIONS
+
+MIME_BY_EXTENSION = {
+    ".pdf": "application/pdf",
+    ".csv": "text/csv",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".txt": "text/plain",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".bmp": "image/bmp",
+    ".avif": "image/avif",
+}
+
+# Límite máximo de peso por archivo: 25 MB
+MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
 class GridFSService:
     def __init__(self):
@@ -34,38 +68,48 @@ class GridFSService:
             self._bucket = AsyncIOMotorGridFSBucket(db)
         return self._bucket
 
-    def _validate_image(self, file: UploadFile) -> str:
-        filename = file.filename or "image.png"
+    def _validate_file(self, file: UploadFile) -> str:
+        filename = file.filename or "archivo"
         content_type = (file.content_type or "").lower()
         ext = os.path.splitext(filename.lower())[1]
 
-        # Validar si es imagen por content_type o por extensión
-        is_valid_type = content_type in ALLOWED_IMAGE_TYPES or content_type.startswith("image/")
-        is_valid_ext = ext in ALLOWED_IMAGE_EXTENSIONS
+        # Validar si es imagen o documento por content_type o por extensión
+        is_valid_type = content_type in ALLOWED_FILE_TYPES or content_type.startswith("image/")
+        is_valid_ext = ext in ALLOWED_FILE_EXTENSIONS
 
         if not (is_valid_type or is_valid_ext):
             raise BadRequestException(
-                f"El archivo '{filename}' no es una imagen válida. Solo se permiten imágenes (PNG, JPEG, WebP, GIF, SVG, etc.)."
+                f"El archivo '{filename}' no tiene un formato permitido. Solo se permiten imágenes (PNG, JPEG, WebP, etc.) y documentos (PDF, CSV, XLSX, TXT)."
             )
 
         # Si el content_type es genérico u omitido, deducirlo por la extensión
-        if not content_type or content_type == "application/octet-stream":
-            guessed_type, _ = mimetypes.guess_type(filename)
-            if guessed_type and guessed_type.startswith("image/"):
-                content_type = guessed_type
+        if not content_type or content_type in ("application/octet-stream", "binary/octet-stream"):
+            if ext in MIME_BY_EXTENSION:
+                content_type = MIME_BY_EXTENSION[ext]
             else:
-                content_type = "image/png"
+                guessed_type, _ = mimetypes.guess_type(filename)
+                content_type = guessed_type or "application/octet-stream"
 
         return content_type
 
+    def _validate_image(self, file: UploadFile) -> str:
+        """Alias para mantener compatibilidad hacia atrás."""
+        return self._validate_file(file)
+
     async def upload_file(self, file: UploadFile) -> str:
-        content_type = self._validate_image(file)
+        content_type = self._validate_file(file)
+        
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            raise BadRequestException(
+                f"El archivo '{file.filename}' supera el tamaño máximo permitido de 25 MB."
+            )
+
         bucket = self._get_bucket()
         grid_in = bucket.open_upload_stream(
-            filename=file.filename or "image.png",
+            filename=file.filename or "archivo",
             metadata={"content_type": content_type}
         )
-        content = await file.read()
         await grid_in.write(content)
         await grid_in.close()
         return str(grid_in._id)

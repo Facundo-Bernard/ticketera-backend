@@ -125,12 +125,17 @@ db = self._client[settings.MONGO_DB_NAME]
 self._bucket = AsyncIOMotorGridFSBucket(db)
 ```
 
-### 2. Validación Rigurosa de Archivos (`_validate_image`)
-Garantiza que solo se suban formatos de imagen válidos:
-- **MIME Types Permitidos**: `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `image/avif`, `image/bmp`, `image/svg+xml`.
-- **Extensiones Permitidas**: `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.avif`, `.bmp`, `.svg`.
-- **Detección Inteligente**: Si el cliente envía `application/octet-stream`, infiere el content-type real mediante `mimetypes.guess_type` analizando la extensión del archivo.
-- Si no es válido, arroja `BadRequestException` (`400 Bad Request`).
+### 2. Validación Rigurosa de Archivos (`_validate_file`)
+Garantiza que solo se suban formatos válidos de imágenes y documentos:
+- **Imágenes Permitidas**: `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.avif`, `.bmp`, `.svg`.
+- **Documentos Permitidos**:
+  - **PDF**: `.pdf` (`application/pdf`)
+  - **CSV**: `.csv` (`text/csv`, `application/csv`)
+  - **Excel**: `.xlsx`, `.xls` (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `application/vnd.ms-excel`)
+  - **Texto**: `.txt` (`text/plain`)
+- **Límite de Tamaño**: Máximo **25 MB** por archivo.
+- **Detección Inteligente**: Si el cliente envía `application/octet-stream`, infiere el content-type real mediante `MIME_BY_EXTENSION` y `mimetypes.guess_type`.
+- Si el formato no es válido o supera el límite de 25 MB, arroja `BadRequestException` (`400 Bad Request`).
 
 ### 3. Operaciones Principales:
 | Método | Firma | Descripción |

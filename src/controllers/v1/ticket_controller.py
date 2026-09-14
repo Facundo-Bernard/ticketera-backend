@@ -31,7 +31,7 @@ async def create_ticket(
     asignar: Optional[str] = Form(None, description="Técnico asignado (opcional)"),
     columna: Optional[int] = Form(1, description="Columna del ticket (1: Ticket, 2: Hitos, 3: Tareas, 4: Tareas periódicas)"),
     frecuencia: Optional[str] = Form(None, description="Frecuencia periódica en formato JSON: {\"numero\": 1, \"periodo\": \"Semanas\"}"),
-    files: List[UploadFile] = File(default=[], description="Solo archivos de imagen permitidos (PNG, JPEG, WebP, GIF, SVG)"),
+    files: List[UploadFile] = File(default=[], description="Archivos adjuntos permitidos: imágenes (PNG, JPEG, WebP, GIF, SVG) y documentos (PDF, CSV, XLSX, TXT)"),
     service: TicketService = Depends(),
     gridfs_service: GridFSService = Depends()
 ):
