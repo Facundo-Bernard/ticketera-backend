@@ -26,6 +26,7 @@ FastAPI (app en src/main.py)
 ├── GET /health                         (health_controller.py)
 └── /api/v1                             (api.py)
     ├── /tickets                        (v1/ticket_controller.py)
+    │   └── /{ticket_id}/comments       (modules/comments/controller.py)
     ├── /files                          (v1/file_controller.py)
     └── /catalogs                       (v1/catalog_controller.py)
 ```
@@ -105,6 +106,19 @@ Alimenta los componentes de selección del frontend mediante respuestas estandar
 | `GET` | `/api/v1/catalogs/estados` | `List[OptionItem]` | `{"value": "en_progreso", "label": "En Progreso"}` |
 | `GET` | `/api/v1/catalogs/prioridades` | `List[OptionItem]` | `{"value": "critica", "label": "Crítica"}` |
 | `GET` | `/api/v1/catalogs/asignables` | `List[OptionItem]` | `{"value": "facundo_bernard", "label": "Facundo Bernard"}` |
+
+---
+
+### 5. 💬 `modules/comments/controller.py` — Comentarios de Tickets
+
+Gestiona el ciclo de vida de los comentarios asociados a cada ticket mediante *Lazy Loading*:
+
+| Método | Endpoint | Respuesta Modelo | Descripción |
+| :--- | :--- | :---: | :--- |
+| `GET` | `/api/v1/tickets/{ticket_id}/comments` | `List[CommentResponse]` | Lista comentarios ordenados cronológicamente (`skip`, `limit`). |
+| `GET` | `/api/v1/tickets/{ticket_id}/comments/count` | `{"ticket_id": str, "total": int}` | Conteo rápido para insignias en frontend sin descargar payload. |
+| `POST` | `/api/v1/tickets/{ticket_id}/comments` | `CommentResponse` (201) | Crea comentario y emite evento SSE `nuevo_comentario`. |
+| `DELETE` | `/api/v1/tickets/{ticket_id}/comments/{comment_id}` | `204 No Content` | Elimina comentario y emite evento SSE `comentario_eliminado`. |
 
 ---
 

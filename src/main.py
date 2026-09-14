@@ -7,13 +7,14 @@ from contextlib import asynccontextmanager
 from .config.settings import settings
 from .config.database import init_db
 from .models.ticket_model import Ticket
+from .modules.comments.model import CommentBucket
 from .controllers import api, health_controller
 from .core.exceptions import NotFoundException, BadRequestException
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await init_db([Ticket])
+    await init_db([Ticket, CommentBucket])
     yield
     # Shutdown
     pass
@@ -57,6 +58,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "Content-Type", "Content-Length"],
 )
 
 # Exception Handlers
