@@ -9,13 +9,15 @@ from .config.database import init_db
 from .models.ticket_model import Ticket
 from .modules.comments.model import CommentBucket
 from .modules.candidatos.model import Candidato
+from .modules.auth import User, seed_default_admin
 from .controllers import api, health_controller
-from .core.exceptions import NotFoundException, BadRequestException
+from .core.exceptions import NotFoundException, BadRequestException, UnauthorizedException, ForbiddenException
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await init_db([Ticket, CommentBucket, Candidato])
+    await init_db([Ticket, CommentBucket, Candidato, User])
+    await seed_default_admin()
     yield
     # Shutdown
     pass
@@ -75,6 +77,21 @@ async def bad_request_exception_handler(request: Request, exc: BadRequestExcepti
     return JSONResponse(
         status_code=400,
         content={"error": "Bad Request", "message": exc.message},
+    )
+
+@app.exception_handler(UnauthorizedException)
+async def unauthorized_exception_handler(request: Request, exc: UnauthorizedException):
+    return JSONResponse(
+        status_code=401,
+        content={"error": "Unauthorized", "message": exc.message},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+@app.exception_handler(ForbiddenException)
+async def forbidden_exception_handler(request: Request, exc: ForbiddenException):
+    return JSONResponse(
+        status_code=403,
+        content={"error": "Forbidden", "message": exc.message},
     )
 
 # Routers

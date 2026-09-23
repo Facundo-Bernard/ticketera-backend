@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     TICKET_CREATION_COOLDOWN_SECONDS: int = 60
     ADMIN_EMAILS: List[str] = []
 
+    # Configuración de Autenticación y JWT
+    JWT_SECRET_KEY: str = "coopya_sistemas_secret_jwt_key_development_2026"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 365  # 1 año (vencimiento prolongado)
+
     @field_validator("ADMIN_EMAILS", mode="before")
     @classmethod
     def parse_admin_emails(cls, v: Any) -> List[str]:
