@@ -35,11 +35,12 @@ src/modules/candidatos/
 
 Montados bajo `/api/v1/candidatos`:
 
-| Método | Endpoint | Estado HTTP | Descripción |
-| :--- | :--- | :---: | :--- |
-| `POST` | `/api/v1/candidatos` | `201 Created` | Registra una postulación y retorna el candidato con su `id` generado. |
-| `GET` | `/api/v1/candidatos/{id}` | `200 OK` | Obtiene el detalle de un candidato por su ObjectId. Retorna `404` si no existe. |
-| `GET` | `/api/v1/candidatos` | `200 OK` | Listado paginado de candidatos ordenados del más reciente al más antiguo. |
+| Método | Endpoint | Estado HTTP | Auth Requerida | Descripción |
+| :--- | :--- | :---: | :---: | :--- |
+| `POST` | `/api/v1/candidatos` | `201 Created` | **Público** | Registra una postulación desde formulario web y retorna el candidato con su `id`. |
+| `GET` | `/api/v1/candidatos/{id}` | `200 OK` | **Bearer Token** | Obtiene el detalle de un candidato por su ObjectId. Retorna `404` si no existe. |
+| `GET` | `/api/v1/candidatos` | `200 OK` | **Bearer Token** | Listado paginado de candidatos ordenados del más reciente al más antiguo. |
+| `DELETE` | `/api/v1/candidatos/{id}` | `204 No Content` | **Bearer Token** | Elimina un candidato por su ObjectId. Retorna `404` si no existe. |
 
 ---
 

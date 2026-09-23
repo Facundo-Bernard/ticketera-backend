@@ -125,13 +125,24 @@ Gestiona el ciclo de vida de los comentarios asociados a cada ticket mediante *L
 
 ### 6. 👤 `modules/candidatos/controller.py` — Candidatos (Puente Temporal)
 
-Puente temporal para el registro y consulta de postulaciones y productos crediticios:
+Puente temporal para el registro público y consulta autenticada de postulaciones crediticias para el dashboard:
 
-| Método | Endpoint | Respuesta Modelo | Descripción |
-| :--- | :--- | :---: | :--- |
-| `POST` | `/api/v1/candidatos` | `CandidatoResponse` (201) | Registra un nuevo candidato y retorna el objeto con su `id` generado. |
-| `GET` | `/api/v1/candidatos/{id}` | `CandidatoResponse` (200) | Obtiene los datos completos de un candidato por su ID. |
-| `GET` | `/api/v1/candidatos` | `List[CandidatoResponse]` (200) | Listado paginado de candidatos ordenados del más reciente al más antiguo. |
+| Método | Endpoint | Respuesta Modelo | Auth Requerida | Descripción |
+| :--- | :--- | :---: | :---: | :--- |
+| `POST` | `/api/v1/candidatos` | `CandidatoResponse` (201) | **Público** | Registra una postulación desde formulario web y retorna el objeto con su `id` generado. |
+| `GET` | `/api/v1/candidatos/{id}` | `CandidatoResponse` (200) | **Bearer Token** | Obtiene los datos completos de un candidato por su ID. |
+| `GET` | `/api/v1/candidatos` | `List[CandidatoResponse]` (200) | **Bearer Token** | Listado paginado de candidatos ordenados del más reciente al más antiguo. |
+| `DELETE` | `/api/v1/candidatos/{id}` | `204 No Content` | **Bearer Token** | Elimina un candidato registrado a partir de su ID de MongoDB. |
+
+---
+
+### 7. 🔐 `modules/auth/controller.py` — Autenticación y Usuarios (Dashboard)
+
+Gestiona las cuentas de operadores y administradores, y la emisión de tokens JWT:
+
+| `POST` | `/api/v1/auth/login` | `TokenResponse` (200) | **Público** | Autentica con credenciales y emite el Bearer Token JWT para el dashboard. |
+| `GET` | `/api/v1/auth/me` | `UserResponse` (200) | **Bearer Token** | Retorna el perfil y rol del usuario logueado actualmente. |
+| *(POST)* | *(`/api/v1/auth/register`)* | - | - | *(Deshabilitado/comentado temporalmente)* |
 
 ---
 
@@ -139,10 +150,12 @@ Puente temporal para el registro y consulta de postulaciones y productos crediti
 
 | Código | Significado | Escenario de Uso en la API |
 | :---: | :--- | :--- |
-| **`200 OK`** | Petición exitosa | Lecturas (`GET`), actualizaciones parciales (`PATCH`), bloqueos y catálogos. |
-| **`201 Created`** | Recurso creado | Creación exitosa de ticket (`POST /api/v1/tickets/`). |
-| **`204 No Content`** | Eliminación exitosa | Eliminación de ticket (`DELETE /api/v1/tickets/{id}`). |
-| **`400 Bad Request`** | Error en la solicitud | Superación de límite diario de 8 tickets, cooldown menor a 60s o formato de archivo no permitido. |
-| **`404 Not Found`** | Recurso no encontrado | ID de ticket o de archivo GridFS inexistente en la base de datos. |
+| **`200 OK`** | Petición exitosa | Lecturas (`GET`), actualizaciones parciales (`PATCH`), bloqueos, login y catálogos. |
+| **`201 Created`** | Recurso creado | Creación exitosa de ticket, registro de candidato o registro de usuario. |
+| **`204 No Content`** | Eliminación exitosa | Eliminación de ticket (`DELETE`), eliminación de comentario o candidato. |
+| **`400 Bad Request`** | Error en la solicitud | Superación de límite diario, cooldown menor a 60s, email ya registrado o token mal formado. |
+| **`401 Unauthorized`** | No autenticado | Token JWT ausente, expirado, firma inválida o credenciales de login erróneas. |
+| **`403 Forbidden`** | Acceso denegado | Usuario autenticado sin los permisos suficientes (ej. requiere rol `admin`). |
+| **`404 Not Found`** | Recurso no encontrado | ID de ticket, candidato, comentario o usuario inexistente en la base de datos. |
 | **`409 Conflict`** | Conflicto concurrente | Ticket en edición por otro operador al intentar bloquearlo o eliminarlo. |
-| **`422 Unprocessable`** | Validación Pydantic fallida | Payload mal formado, correo con sintaxis inválida o columna fuera del rango `1..4`. |
+| **`422 Unprocessable`** | Validación Pydantic fallida | Payload mal formado, correo con sintaxis inválida o campos requeridos ausentes. |

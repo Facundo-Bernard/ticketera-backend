@@ -37,3 +37,13 @@ class CandidatoService:
         Retorna la lista de candidatos ordenados por fecha de creación más reciente.
         """
         return await self.repository.get_all_sorted(skip=skip, limit=limit)
+
+    async def delete_candidato(self, id: PydanticObjectId) -> bool:
+        """
+        Elimina un candidato por su ID o lanza NotFoundException si no existe.
+        """
+        deleted = await self.repository.delete(id)
+        if not deleted:
+            raise NotFoundException(f"Candidato con id '{id}' no encontrado")
+        return True
+
