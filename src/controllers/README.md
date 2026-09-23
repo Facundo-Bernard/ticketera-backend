@@ -28,7 +28,8 @@ FastAPI (app en src/main.py)
     ├── /tickets                        (v1/ticket_controller.py)
     │   └── /{ticket_id}/comments       (modules/comments/controller.py)
     ├── /files                          (v1/file_controller.py)
-    └── /catalogs                       (v1/catalog_controller.py)
+    ├── /catalogs                       (v1/catalog_controller.py)
+    └── /candidatos                     (modules/candidatos/controller.py)
 ```
 
 ---
@@ -119,6 +120,18 @@ Gestiona el ciclo de vida de los comentarios asociados a cada ticket mediante *L
 | `GET` | `/api/v1/tickets/{ticket_id}/comments/count` | `{"ticket_id": str, "total": int}` | Conteo rápido para insignias en frontend sin descargar payload. |
 | `POST` | `/api/v1/tickets/{ticket_id}/comments` | `CommentResponse` (201) | Crea comentario y emite evento SSE `nuevo_comentario`. |
 | `DELETE` | `/api/v1/tickets/{ticket_id}/comments/{comment_id}` | `204 No Content` | Elimina comentario y emite evento SSE `comentario_eliminado`. |
+
+---
+
+### 6. 👤 `modules/candidatos/controller.py` — Candidatos (Puente Temporal)
+
+Puente temporal para el registro y consulta de postulaciones y productos crediticios:
+
+| Método | Endpoint | Respuesta Modelo | Descripción |
+| :--- | :--- | :---: | :--- |
+| `POST` | `/api/v1/candidatos` | `CandidatoResponse` (201) | Registra un nuevo candidato y retorna el objeto con su `id` generado. |
+| `GET` | `/api/v1/candidatos/{id}` | `CandidatoResponse` (200) | Obtiene los datos completos de un candidato por su ID. |
+| `GET` | `/api/v1/candidatos` | `List[CandidatoResponse]` (200) | Listado paginado de candidatos ordenados del más reciente al más antiguo. |
 
 ---
 

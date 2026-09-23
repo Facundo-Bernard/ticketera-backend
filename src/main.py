@@ -8,13 +8,14 @@ from .config.settings import settings
 from .config.database import init_db
 from .models.ticket_model import Ticket
 from .modules.comments.model import CommentBucket
+from .modules.candidatos.model import Candidato
 from .controllers import api, health_controller
 from .core.exceptions import NotFoundException, BadRequestException
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await init_db([Ticket, CommentBucket])
+    await init_db([Ticket, CommentBucket, Candidato])
     yield
     # Shutdown
     pass
