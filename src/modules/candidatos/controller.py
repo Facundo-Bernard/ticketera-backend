@@ -40,6 +40,12 @@ EXAMPLE_CANDIDATO_JSON = (
     status_code=status.HTTP_201_CREATED,
     summary="Registrar un nuevo candidato con papelería opcional (Público)"
 )
+@router.post(
+    "/",
+    response_model=CandidatoResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False
+)
 async def create_candidato(
     data: str = Form(
         ...,
@@ -109,6 +115,11 @@ async def get_candidato(
     "",
     response_model=List[CandidatoResponse],
     summary="Listar candidatos registrados (Dashboard)"
+)
+@router.get(
+    "/",
+    response_model=List[CandidatoResponse],
+    include_in_schema=False
 )
 async def list_candidatos(
     skip: int = Query(0, ge=0, description="Registros a omitir para paginación"),

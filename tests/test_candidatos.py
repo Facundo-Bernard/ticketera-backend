@@ -245,3 +245,44 @@ def test_delete_candidato_with_papeleria_cascade_flow(client):
     # 6. Verificar que el archivo en GridFS fue purgado en cascada (GET papeleria_url -> 404)
     res_pap_purged = client.get(papeleria_url, headers=auth_headers)
     assert res_pap_purged.status_code == 404
+
+def test_candidato_endpoints_with_trailing_slash(client):
+    auth_headers = get_auth_headers(client)
+    uid = uuid.uuid4().hex[:6]
+    payload = {
+        "nombreCompleto": f"Trailing Slash {uid}",
+        "dni": f"32{uid[:6]}",
+        "email": f"slash_{uid}@email.com",
+        "telefono": "+54 11 9999-9999",
+        "direccion": "Avenida Siempre Viva 742",
+        "genero": "other",
+        "edad": 28,
+        "situacionLaboral": "monotributista",
+        "ingresoMensual": 600000,
+        "moneda": "ARS",
+        "bancosSeleccionados": ["macro"],
+        "productoSeleccionado": {
+            "familia": "Asistodo",
+            "plan": "1",
+            "monto": 300000,
+            "plazoMeses": 12
+        },
+        "origen": "web"
+    }
+
+    # Probar POST con trailing slash sin seguir redirecciones (follow_redirects=False)
+    res_post_slash = client.post(
+        "/api/v1/candidatos/",
+        data={"data": json.dumps(payload)},
+        follow_redirects=False
+    )
+    assert res_post_slash.status_code == 201, f"Falló POST con barra: {res_post_slash.status_code} {res_post_slash.text}"
+
+    # Probar GET con trailing slash sin seguir redirecciones (follow_redirects=False)
+    res_get_slash = client.get(
+        "/api/v1/candidatos/",
+        headers=auth_headers,
+        follow_redirects=False
+    )
+    assert res_get_slash.status_code == 200, f"Falló GET con barra: {res_get_slash.status_code} {res_get_slash.text}"
+
