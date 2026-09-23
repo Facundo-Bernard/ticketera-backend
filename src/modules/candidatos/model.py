@@ -27,6 +27,8 @@ class Candidato(Document):
     bancosSeleccionados: List[str] = Field(default_factory=list)
     productoSeleccionado: ProductoSeleccionado
     origen: str = Field(default="web")
+    papeleria: Optional[str] = Field(default=None, description="URL para consultar o previsualizar el archivo")
+    papeleria_file_ids: List[str] = Field(default_factory=list, description="Lista de IDs de archivos en GridFS candidatos_papeleria")
     fechaCreacion: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

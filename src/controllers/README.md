@@ -129,10 +129,11 @@ Puente temporal para el registro público y consulta autenticada de postulacione
 
 | Método | Endpoint | Respuesta Modelo | Auth Requerida | Descripción |
 | :--- | :--- | :---: | :---: | :--- |
-| `POST` | `/api/v1/candidatos` | `CandidatoResponse` (201) | **Público** | Registra una postulación desde formulario web y retorna el objeto con su `id` generado. |
+| `POST` | `/api/v1/candidatos` | `CandidatoResponse` (201) | **Público** | Registra una postulación con `multipart/form-data` (`data` JSON y archivo `papeleria`). |
 | `GET` | `/api/v1/candidatos/{id}` | `CandidatoResponse` (200) | **Bearer Token** | Obtiene los datos completos de un candidato por su ID. |
 | `GET` | `/api/v1/candidatos` | `List[CandidatoResponse]` (200) | **Bearer Token** | Listado paginado de candidatos ordenados del más reciente al más antiguo. |
-| `DELETE` | `/api/v1/candidatos/{id}` | `204 No Content` | **Bearer Token** | Elimina un candidato registrado a partir de su ID de MongoDB. |
+| `GET` | `/api/v1/candidatos/papeleria/{file_id}` | Stream Binario (200) | **Bearer Token** | Visualiza / descarga inline un archivo de papelería (PDF o imagen) desde GridFS por su `file_id`. |
+| `DELETE` | `/api/v1/candidatos/{id}` | `204 No Content` | **Bearer Token** | Elimina un candidato registrado y purga en cascada su papelería de GridFS. |
 
 ---
 

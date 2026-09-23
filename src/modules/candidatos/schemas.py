@@ -23,6 +23,7 @@ class CandidatoCreate(BaseModel):
     bancosSeleccionados: Optional[List[str]] = Field(default_factory=list, description="Lista de bancos seleccionados")
     productoSeleccionado: ProductoSeleccionadoSchema = Field(..., description="Detalle del producto crediticio")
     origen: Optional[str] = Field(default="web", description="Canal de origen de la postulación")
+    papeleria: Optional[str] = Field(default=None, description="URL o identificador de papelería en GridFS")
 
 class CandidatoResponse(BaseModel):
     id: PydanticObjectId
@@ -39,6 +40,7 @@ class CandidatoResponse(BaseModel):
     bancosSeleccionados: List[str]
     productoSeleccionado: ProductoSeleccionadoSchema
     origen: str
+    papeleria: Optional[str] = None
     fechaCreacion: datetime
 
     @field_serializer("fechaCreacion", when_used="json")
