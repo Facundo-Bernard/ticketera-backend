@@ -141,13 +141,15 @@ def test_ticket_filters(client):
     # 1. Filtrar por estado 'abierto'
     res_estado = client.get("/api/v1/tickets/?estado=abierto")
     assert res_estado.status_code == 200
-    tickets_abiertos = res_estado.json()
+    data_estado = res_estado.json()
+    tickets_abiertos = data_estado.get("items", data_estado) if isinstance(data_estado, dict) else data_estado
     assert all(t["estado"] == "abierto" for t in tickets_abiertos)
 
     # 2. Filtrar por asignado 'Carlos'
     res_asignado = client.get("/api/v1/tickets/?asignar=Carlos")
     assert res_asignado.status_code == 200
-    tickets_carlos = res_asignado.json()
+    data_carlos = res_asignado.json()
+    tickets_carlos = data_carlos.get("items", data_carlos) if isinstance(data_carlos, dict) else data_carlos
     assert len(tickets_carlos) >= 1
     assert any("Carlos" in t["asignar"] for t in tickets_carlos)
 
@@ -157,13 +159,17 @@ def test_ticket_filters(client):
     hoy_str = ahora.strftime("%Y-%m-%d")
     res_fecha_simple = client.get("/api/v1/tickets/", params={"fecha_desde": hoy_str, "fecha_hasta": hoy_str})
     assert res_fecha_simple.status_code == 200, f"Error en filtro de fecha simple: {res_fecha_simple.text}"
-    assert len(res_fecha_simple.json()) >= 2
+    data_fecha_simple = res_fecha_simple.json()
+    items_fecha_simple = data_fecha_simple.get("items", data_fecha_simple) if isinstance(data_fecha_simple, dict) else data_fecha_simple
+    assert len(items_fecha_simple) >= 2
 
     # 5. Filtrar pasando solo fecha_hasta con hora (debe autocompletar hasta las 23:59:59 y encontrar los tickets)
     hoy_iso_hora = ahora.strftime("%Y-%m-%dT%H:%M")
     res_solo_hasta = client.get("/api/v1/tickets/", params={"fecha_hasta": hoy_iso_hora})
     assert res_solo_hasta.status_code == 200
-    assert len(res_solo_hasta.json()) >= 2
+    data_solo_hasta = res_solo_hasta.json()
+    items_solo_hasta = data_solo_hasta.get("items", data_solo_hasta) if isinstance(data_solo_hasta, dict) else data_solo_hasta
+    assert len(items_solo_hasta) >= 2
 
     # 6. Filtrar por columna
     uid_col = uuid.uuid4().hex[:6]
@@ -175,9 +181,18 @@ def test_ticket_filters(client):
     })
     res_col = client.get("/api/v1/tickets/?columna=2")
     assert res_col.status_code == 200
-    tickets_col2 = res_col.json()
+    data_col2 = res_col.json()
+    tickets_col2 = data_col2.get("items", data_col2) if isinstance(data_col2, dict) else data_col2
     assert len(tickets_col2) >= 1
     assert all(t["columna"] == 2 for t in tickets_col2)
+
+    # 7. Filtrar por búsqueda libre (q)
+    res_q = client.get("/api/v1/tickets/?q=impresora")
+    assert res_q.status_code == 200
+    data_q = res_q.json()
+    items_q = data_q.get("items", data_q) if isinstance(data_q, dict) else data_q
+    assert len(items_q) >= 1
+    assert any("impresora" in t["descripcion"].lower() for t in items_q)
 
 def test_catalog_endpoints(client):
     # 1. Estados
