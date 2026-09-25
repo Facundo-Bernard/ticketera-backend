@@ -6,7 +6,7 @@ from typing import List, Optional, Union
 from datetime import datetime, timezone
 from pydantic import EmailStr, BaseModel, Field
 from beanie import PydanticObjectId
-from ...schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse
+from ...schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse, TicketPagedResponse
 from ...models.ticket_model import PrioridadEnum, EstadoEnum, Frecuencia
 from ...services.ticket_service import TicketService
 from ...services.gridfs_service import GridFSService
@@ -109,33 +109,54 @@ async def ticket_stream(request: Request):
         }
     )
 
-@router.get("/", response_model=List[TicketResponse], summary="Listar tickets con filtros y paginación")
+@router.get("/", response_model=TicketPagedResponse, summary="Listar tickets con filtros y paginacion")
 async def get_tickets(
-    fecha_desde: Optional[str] = Query(None, description="Fecha de inicio flexible (ej: 2026-08-01 o 2026-08-01T14:30:00)"),
-    fecha_hasta: Optional[str] = Query(None, description="Fecha fin flexible (ej: 2026-08-31 o 2026-08-31T23:59:59)"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha de inicio (ej: 2026-08-01 o 2026-08-01T14:30:00)"),
+    fecha_hasta: Optional[str] = Query(None, description="Fecha fin (ej: 2026-08-31 o 2026-08-31T23:59:59)"),
     estado: Optional[EstadoEnum] = Query(None, description="Filtrar por estado del ticket"),
     prioridad: Optional[PrioridadEnum] = Query(None, description="Filtrar por prioridad"),
-    asignar: Optional[str] = Query(None, description="Filtrar por técnico/usuario asignado"),
-    columna: Optional[int] = Query(None, ge=1, le=4, description="Filtrar por columna (1, 2, 3, 4)"),
-    leido: Optional[bool] = Query(None, description="Filtrar por leído (true/false)"),
-    skip: int = Query(0, ge=0, description="Registros a omitir"),
-    limit: int = Query(100, ge=1, le=500, description="Límite de registros a devolver"),
+    asignar: Optional[str] = Query(None, description="Filtrar por tecnico/usuario asignado (busqueda parcial)"),
+    columna: Optional[int] = Query(None, ge=1, le=4, description="Filtrar por columna (1-4)"),
+    leido: Optional[bool] = Query(None, description="Filtrar por leido (true/false)"),
+    q: Optional[str] = Query(None, description="Busqueda libre por titulo o descripcion"),
+    incluir_resueltos: bool = Query(False, description="Incluir tickets resueltos/cerrados. False por defecto (tablero activo)."),
+    skip: int = Query(0, ge=0, description="Registros a omitir (offset)"),
+    limit: int = Query(50, ge=1, le=200, description="Limite de registros por pagina"),
     service: TicketService = Depends()
 ):
-    filters = {
-        "fecha_desde": fecha_desde,
-        "fecha_hasta": fecha_hasta,
-        "estado": estado,
-        "prioridad": prioridad,
-        "asignar": asignar,
-        "columna": columna,
-        "leido": leido
-    }
-    clean_filters = {k: v for k, v in filters.items() if v is not None}
-    return await service.get_all_tickets(
-        filters=clean_filters if clean_filters else None,
+    """
+    Lista tickets activos con soporte completo de filtros y paginacion.
+
+    Por defecto excluye tickets en estado **resuelto** y **cerrado**.
+    Para traer el historial de resueltos, enviar `incluir_resueltos=true`.
+    """
+    filters: dict = {}
+
+    if fecha_desde is not None:
+        filters["fecha_desde"] = fecha_desde
+    if fecha_hasta is not None:
+        filters["fecha_hasta"] = fecha_hasta
+    if estado is not None:
+        filters["estado"] = estado
+    if prioridad is not None:
+        filters["prioridad"] = prioridad
+    if asignar is not None:
+        filters["asignar"] = asignar
+    if columna is not None:
+        filters["columna"] = columna
+    if leido is not None:
+        filters["leido"] = leido
+    if q is not None:
+        filters["q"] = q
+
+    # Excluir resueltos y cerrados del tablero principal (a menos que se pida explicitamente)
+    if not incluir_resueltos and "estado" not in filters:
+        filters["estado_excluir"] = ["resuelto", "cerrado"]
+
+    return await service.get_tickets_paged(
+        filters=filters,
         skip=skip,
-        limit=limit
+        limit=limit,
     )
 
 @router.patch("/{id}/read", response_model=TicketResponse, summary="Marcar ticket como leído")

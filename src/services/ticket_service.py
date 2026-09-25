@@ -4,7 +4,7 @@ from fastapi import Depends, UploadFile, HTTPException, status
 from beanie import PydanticObjectId
 from pymongo import ReturnDocument
 from ..repositories.ticket_repository import TicketRepository
-from ..schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse
+from ..schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse, TicketPagedResponse
 from ..models.ticket_model import Ticket
 from ..core.exceptions import NotFoundException
 from ..core.sse_manager import sse_manager
@@ -60,12 +60,27 @@ class TicketService:
         self,
         filters: Optional[dict] = None,
         skip: int = 0,
-        limit: int = 100
+        limit: int = 50,
     ) -> List[Ticket]:
         if filters:
             return await self.repository.get_filtered(filters=filters, skip=skip, limit=limit)
         return await self.repository.get_all(skip=skip, limit=limit)
 
+    async def get_tickets_paged(
+        self,
+        filters: Optional[dict] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> TicketPagedResponse:
+        """Devuelve tickets paginados junto al total que coincide con los filtros."""
+        effective_filters = filters or {}
+        total, items = await self.repository.get_paged(filters=effective_filters, skip=skip, limit=limit)
+        return TicketPagedResponse(
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[TicketResponse.model_validate(t) for t in items],
+        )
     async def get_ticket(self, id: PydanticObjectId) -> Ticket:
         ticket = await self.repository.get(id)
         if not ticket:
@@ -270,3 +285,5 @@ class TicketService:
             pass
 
         return True
+
+
