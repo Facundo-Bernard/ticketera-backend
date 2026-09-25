@@ -78,6 +78,17 @@ class CommentService:
                 "fecha_creacion": saved_item.fecha_creacion.isoformat()
             }
         })
+        try:
+            from ..notifications import NotificationService
+            autor_nombre = comment_in.autor_nombre or "Operador"
+            preview = comment_in.contenido[:80] + ("..." if len(comment_in.contenido) > 80 else "")
+            await NotificationService.broadcast({
+                "title": "💬 Nuevo comentario en Ticket",
+                "body": f"{autor_nombre}: {preview}",
+                "url": "/"
+            })
+        except Exception:
+            pass
 
         return CommentResponse(
             id=saved_item.id,

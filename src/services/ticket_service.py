@@ -137,6 +137,12 @@ class TicketService:
             try:
                 ticket_resp = TicketResponse.model_validate(saved_ticket)
                 await sse_manager.broadcast("nuevo_ticket", ticket_resp.model_dump(mode="json"))
+                from ..modules.notifications import NotificationService
+                await NotificationService.broadcast({
+                    "title": f"🎫 Nuevo Ticket: {saved_ticket.identificador or f'TK-{saved_ticket.id}'}",
+                    "body": f"{saved_ticket.titulo}\nSolicitado por: {saved_ticket.correo or saved_ticket.creado_por or 'Usuario'}",
+                    "url": "/"
+                })
             except Exception:
                 pass
 

@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 365  # 1 año (vencimiento prolongado)
 
+    # Configuracion Web Push (VAPID)
+    VAPID_PUBLIC_KEY: str = "BMsXWvjJkRm0nEiE1tXTx9tfaq79Wc7x3_uN4n9xMigcgi_NN1-dI58YwYK5kY8d1xtmGdbQ2oaNg9rOaaRDHbo"
+    VAPID_PRIVATE_KEY: str = "mQ-RRqbL4rhbOm9YOom3MTOU3IWmFY-0DwjFgF5qCeU"
+    VAPID_CLAIMS_EMAIL: str = "admin@coopya.com"
+
+
     @field_validator("ADMIN_EMAILS", mode="before")
     @classmethod
     def parse_admin_emails(cls, v: Any) -> List[str]:

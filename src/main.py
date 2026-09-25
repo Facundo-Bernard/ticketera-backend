@@ -10,13 +10,14 @@ from .models.ticket_model import Ticket
 from .modules.comments.model import CommentBucket
 from .modules.candidatos.model import Candidato
 from .modules.auth import User, seed_default_admin
+from .modules.notifications import PushSubscription
 from .controllers import api, health_controller
 from .core.exceptions import NotFoundException, BadRequestException, UnauthorizedException, ForbiddenException
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await init_db([Ticket, CommentBucket, Candidato, User])
+    await init_db([Ticket, CommentBucket, Candidato, User, PushSubscription])
     await seed_default_admin()
     yield
     # Shutdown
