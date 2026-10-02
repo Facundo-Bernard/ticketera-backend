@@ -11,7 +11,7 @@ venv.bak/
 .env.local
 .env.*.local
 *.env
-
+.
 # Python Bytecode & Cache
 __pycache__/
 *.py[cod]
