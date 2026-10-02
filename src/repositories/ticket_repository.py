@@ -14,7 +14,10 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
         query = {}
 
         if filters.get("estado"):
-            query["estado"] = filters["estado"]
+            if isinstance(filters["estado"], list):
+                query["estado"] = {"$in": filters["estado"]}
+            else:
+                query["estado"] = filters["estado"]
         elif filters.get("estado_excluir"):
             # Excluir estados especificos (ej: resuelto, cerrado para el tablero activo)
             query["estado"] = {"$nin": filters["estado_excluir"]}
