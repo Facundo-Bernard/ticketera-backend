@@ -1,47 +1,36 @@
 services:
+  # 1. Portero Web y Reverse Proxy (sirve el Frontend y redirige las APIs)
   caddy:
     image: caddy:2-alpine
-    container_name: ticketera-caddy
+    container_name: ticketcoopya-caddy
     restart: unless-stopped
     ports:
-      # Puerto 8085 expuesto hacia el host / exterior
-      - "8085:8085"
+      - "8085:8085"                       # Puerto expuesto para TicketCoopya hacia el exterior
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile  # Reglas de proxy y ruteo
     depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - ticketera-net
-    security_opt:
-      - no-new-privileges:true
+      - backend
 
+  # 2. Backend FastAPI (Python)
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ticketera-backend
+    build: .
+    container_name: ticketcoopya-backend
     restart: unless-stopped
-    # Solo expuesto dentro de la red privada de Docker, nunca directamente al exterior
-    expose:
-      - "8085"
     env_file:
-      - .env
+      - .env                              # Carga automática de variables de entorno
     environment:
+      - MONGO_URI=mongodb://mongodb:27017/tickets_db
       - PORT=8085
-    networks:
-      - ticketera-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    security_opt:
-      - no-new-privileges:true
+    depends_on:
+      - mongodb
 
-networks:
-  ticketera-net:
-    driver: bridge
+  # 3. Base de Datos MongoDB (independiente de mayores-actualizaciones)
+  mongodb:
+    image: mongo:7.0
+    container_name: ticketcoopya-mongodb  # Nombre propio para evitar colisiones
+    restart: unless-stopped
+    volumes:
+      - ticketcoopya_mongo_data:/data/db  # Persistencia de datos propia
 
 volumes:
-  caddy_data:
-  caddy_config:
+  ticketcoopya_mongo_data:
