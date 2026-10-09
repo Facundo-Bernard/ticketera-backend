@@ -1,0 +1,38 @@
+# Configuración de Caddy Reverse Proxy para Ticketera Backend
+# Puerto 8085 (HTTP directo / Reverse Proxy)
+:8085 {
+    # Logging estructurado en consola
+    log {
+        output stdout
+        format console
+    }
+
+    # Encabezados de seguridad HTTP recomendados (Hardening)
+    header {
+        # Evitar ataques de clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevenir MIME-sniffing
+        X-Content-Type-Options "nosniff"
+        # Protección de referrers
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Ocultar la firma del servidor web para evitar fingerprinting
+        -Server
+    }
+
+    # Compresión automática con Gzip y Zstandard para mejor rendimiento
+    encode gzip zstd
+
+    # Reenvío de tráfico seguro hacia el contenedor del backend
+    reverse_proxy backend:8085 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+    }
+}
+
+# OPCIONAL (HTTPS Automático):
+# Si deseas que Caddy gestione automáticamente SSL/TLS con tu dominio DuckDNS:
+# ticketscoopya.duckdns.org:8085 {
+#     tls internal # o tu email para Let's Encrypt / ZeroSSL
+#     encode gzip zstd
+#     reverse_proxy backend:8085
+# }

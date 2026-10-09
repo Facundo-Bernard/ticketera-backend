@@ -1,0 +1,47 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: ticketera-caddy
+    restart: unless-stopped
+    ports:
+      # Puerto 8085 expuesto hacia el host / exterior
+      - "8085:8085"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - ticketera-net
+    security_opt:
+      - no-new-privileges:true
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ticketera-backend
+    restart: unless-stopped
+    # Solo expuesto dentro de la red privada de Docker, nunca directamente al exterior
+    expose:
+      - "8085"
+    env_file:
+      - .env
+    environment:
+      - PORT=8085
+    networks:
+      - ticketera-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  ticketera-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

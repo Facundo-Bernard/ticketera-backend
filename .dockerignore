@@ -1,0 +1,54 @@
+# Entornos virtuales
+venv/
+.venv/
+env/
+ENV/
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Git y control de versiones
+.git/
+.gitignore
+
+# Tests, cobertura y caches de desarrollo
+tests/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+pytest.ini
+
+# Variables de entorno locales y logs
+.env
+*.log
+logs/
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Docker files
+Dockerfile
+docker-compose*.yml
+.dockerignore
+Caddyfile
+
+# Scripts de Windows y temporales
+run_backend.bat
+run_production.bat
+1.txt
+
+# Asistentes y agentes
+.agents/
+.gemini/
+.claude/
