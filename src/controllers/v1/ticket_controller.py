@@ -149,9 +149,13 @@ async def get_tickets(
     if q is not None:
         filters["q"] = q
 
-    # Excluir resueltos y cerrados del tablero principal (a menos que se pida explicitamente)
-    if not incluir_resueltos and "estado" not in filters:
-        filters["estado_excluir"] = ["resuelto", "cerrado"]
+    # Si se consulta el historial (incluir_resueltos=True), filtrar solo resueltos y cerrados
+    # Si es el tablero activo (incluir_resueltos=False), excluir resueltos y cerrados
+    if "estado" not in filters:
+        if incluir_resueltos:
+            filters["estado"] = ["resuelto", "cerrado"]
+        else:
+            filters["estado_excluir"] = ["resuelto", "cerrado"]
 
     return await service.get_tickets_paged(
         filters=filters,

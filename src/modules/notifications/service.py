@@ -54,7 +54,10 @@ class NotificationService:
                 subscription_info=subscription_info,
                 data=json.dumps(payload),
                 vapid_private_key=settings.VAPID_PRIVATE_KEY,
-                vapid_claims={"sub": f"mailto:{settings.VAPID_CLAIMS_EMAIL}"}
+                vapid_claims={"sub": f"mailto:{settings.VAPID_CLAIMS_EMAIL}"},
+                ttl=86400,
+                headers={"Urgency": "high"},
+                timeout=10
             )
             return True
         except WebPushException as ex:
