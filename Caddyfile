@@ -1,6 +1,9 @@
-# Configuración de Caddy Reverse Proxy para Ticketera Backend
+# Configuración de Caddy Reverse Proxy para Frontend (dist) y Backend (FastAPI)
 # Puerto 8085 (HTTP directo / Reverse Proxy)
 :8085 {
+    root * /srv
+    encode gzip zstd
+
     # Logging estructurado en consola
     log {
         output stdout
@@ -19,13 +22,35 @@
         -Server
     }
 
-    # Compresión automática con Gzip y Zstandard para mejor rendimiento
-    encode gzip zstd
+    # 1. Enrutar API, Health y Documentación Swagger al contenedor de Backend
+    handle /api/* {
+        reverse_proxy backend:8085 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            flush_interval -1
+        }
+    }
 
-    # Reenvío de tráfico seguro hacia el contenedor del backend
-    reverse_proxy backend:8085 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
+    handle /health* {
+        reverse_proxy backend:8085
+    }
+
+    handle /docs* {
+        reverse_proxy backend:8085
+    }
+
+    handle /openapi.json {
+        reverse_proxy backend:8085
+    }
+
+    handle /redoc* {
+        reverse_proxy backend:8085
+    }
+
+    # 2. Servir Frontend y fallback SPA exclusivo para rutas que no son del backend
+    handle {
+        try_files {path} /index.html
+        file_server
     }
 }
 

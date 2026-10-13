@@ -8,8 +8,10 @@ services:
       - "8085:8085"                       # Puerto expuesto para TicketCoopya hacia el exterior
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile  # Reglas de proxy y ruteo
+      - ./dist:/srv                       # Archivos estáticos del Frontend (React/Vite)
     depends_on:
-      - backend
+      backend:
+        condition: service_started
 
   # 2. Backend FastAPI (Python)
   backend:
@@ -19,10 +21,12 @@ services:
     env_file:
       - .env                              # Carga automática de variables de entorno
     environment:
-      - MONGO_URI=mongodb://mongodb:27017/tickets_db
+      - MONGO_URI=${MONGO_URI:-mongodb://mongodb:27017/tickets_db}
+      - MONGO_DB_NAME=${MONGO_DB_NAME:-tickets_db}
       - PORT=8085
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
 
   # 3. Base de Datos MongoDB (independiente de mayores-actualizaciones)
   mongodb:
@@ -31,6 +35,12 @@ services:
     restart: unless-stopped
     volumes:
       - ticketcoopya_mongo_data:/data/db  # Persistencia de datos propia
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 volumes:
   ticketcoopya_mongo_data:
