@@ -10,20 +10,36 @@
         format console
     }
 
-    # Encabezados de seguridad HTTP recomendados (Hardening)
+    # Encabezados globales de seguridad (Hardening)
     header {
-        # Evitar ataques de clickjacking
-        X-Frame-Options "SAMEORIGIN"
-        # Prevenir MIME-sniffing
-        X-Content-Type-Options "nosniff"
-        # Protección de referrers
-        Referrer-Policy "strict-origin-when-cross-origin"
         # Ocultar la firma del servidor web para evitar fingerprinting
         -Server
+
+        # Prevención de ataques MIME-sniffing
+        X-Content-Type-Options "nosniff"
+
+        # Protección contra ataques de Clickjacking
+        X-Frame-Options "DENY"
+
+        # Control de fuga de información en la cabecera Referer
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Restricción de APIs sensibles del navegador
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
     }
 
-    # 1. Enrutar API, Health y Documentación Swagger al contenedor de Backend
-    handle /api/* {
+    # Protección contra Payloads excesivos (Anti-DoS / mitigación de desbordamiento de memoria)
+    request_body {
+        max_size 10MB
+    }
+
+    # Bloquear acceso a archivos y directorios ocultos (.env, .git, etc.)
+    @hidden path */.*
+    respond @hidden 404
+
+    # Aislamiento de la aplicación mediante Proxy Inverso explícito hacia FastAPI
+    @backend path /api* /health* /docs* /openapi.json /redoc*
+    handle @backend {
         reverse_proxy backend:8085 {
             header_up Host {host}
             header_up X-Real-IP {remote_host}
@@ -31,23 +47,7 @@
         }
     }
 
-    handle /health* {
-        reverse_proxy backend:8085
-    }
-
-    handle /docs* {
-        reverse_proxy backend:8085
-    }
-
-    handle /openapi.json {
-        reverse_proxy backend:8085
-    }
-
-    handle /redoc* {
-        reverse_proxy backend:8085
-    }
-
-    # 2. Servir Frontend y fallback SPA exclusivo para rutas que no son del backend
+    # Servir Frontend y fallback SPA exclusivo para rutas que no son del backend
     handle {
         try_files {path} /index.html
         file_server
