@@ -13,6 +13,7 @@ services:
       - ./dist:/srv:ro                       # Archivos estáticos montados en solo lectura
     networks:
       - web_net                              # Red de acceso web
+      - asistodo_shared_net                  # Red compartida interna para comunicación entre contenedores
     deploy:
       resources:
         limits:
@@ -96,6 +97,9 @@ networks:
   db_net:
     driver: bridge
     internal: true                           # Red interna aislada sin salida al exterior
+  asistodo_shared_net:
+    name: asistodo_shared_net
+    external: true                           # Red Docker externa compartida con asistodoweb
 
 volumes:
   ticketcoopya_mongo_data:
