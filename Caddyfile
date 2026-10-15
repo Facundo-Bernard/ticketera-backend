@@ -30,7 +30,7 @@
 
     # Protección contra Payloads excesivos (Anti-DoS / mitigación de desbordamiento de memoria)
     request_body {
-        max_size 10MB
+        max_size 30MB
     }
 
     # Bloquear acceso a archivos y directorios ocultos (.env, .git, etc.)

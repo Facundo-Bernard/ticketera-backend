@@ -30,6 +30,19 @@ class Settings(BaseSettings):
     VAPID_CLAIMS_EMAIL: str = "admin@coopya.com"
 
 
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: Any) -> List[str]:
+        if isinstance(v, str):
+            v_trimmed = v.strip()
+            if v_trimmed.startswith("[") and v_trimmed.endswith("]"):
+                try:
+                    return json.loads(v_trimmed)
+                except Exception:
+                    pass
+            return [origin.strip() for origin in v_trimmed.split(",") if origin.strip()]
+        return v or ["*"]
+
     @field_validator("ADMIN_EMAILS", mode="before")
     @classmethod
     def parse_admin_emails(cls, v: Any) -> List[str]:
