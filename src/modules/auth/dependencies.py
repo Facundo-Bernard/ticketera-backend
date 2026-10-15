@@ -7,20 +7,24 @@ from .model import User
 from .security import decode_access_token
 from .repository import UserRepository
 
-# Esquema de seguridad Bearer para Swagger UI y validación de encabezados HTTP
-bearer_scheme = HTTPBearer(auto_error=True)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    token: Optional[str] = None,
     repository: UserRepository = Depends()
 ) -> User:
     """
-    Dependencia de FastAPI que valida el token JWT Bearer del encabezado Authorization.
+    Dependencia de FastAPI que valida el token JWT Bearer del encabezado Authorization
+    o mediante el parámetro query 'token' (ideal para EventSource SSE).
     Verifica firma, expiración y vigencia del usuario en MongoDB.
     """
-    token = credentials.credentials
+    auth_token = credentials.credentials if credentials else token
+    if not auth_token:
+        raise UnauthorizedException("Se requiere token de autenticación")
+
     try:
-        payload = decode_access_token(token)
+        payload = decode_access_token(auth_token)
     except Exception as e:
         raise UnauthorizedException(f"Token de autenticación inválido o expirado: {str(e)}")
 

@@ -1,12 +1,50 @@
+import time
+from typing import Dict, List, Optional
 from datetime import datetime, timezone, timedelta
 from ..models.ticket_model import Ticket
 from ..core.exceptions import BadRequestException
 from ..config.settings import settings
 
+# Registro en memoria de peticiones por IP: {ip: [timestamps]}
+_ip_requests: Dict[str, List[float]] = {}
+MAX_TICKETS_PER_IP_WINDOW = 5
+IP_WINDOW_SECONDS = 600  # 10 minutos
+
 class RateLimitService:
     def __init__(self):
         self.max_daily_tickets: int = settings.MAX_DAILY_TICKETS_PER_EMAIL
         self.cooldown_seconds: int = settings.TICKET_CREATION_COOLDOWN_SECONDS
+
+    def validate_honeypot(self, honeypot_value: Optional[str]) -> None:
+        """
+        Anti-Bot Honeypot: si el campo trampa invisible contiene texto,
+        la petición proviene de un bot automatizado.
+        """
+        if honeypot_value and honeypot_value.strip():
+            raise BadRequestException("Petición rechazada por verificación de seguridad.")
+
+    def validate_ip_rate_limit(self, client_ip: str) -> None:
+        """
+        Limita la cantidad de tickets creados por una misma IP
+        a un máximo de 5 tickets cada 10 minutos.
+        """
+        if not client_ip:
+            return
+
+        now = time.time()
+        cutoff = now - IP_WINDOW_SECONDS
+
+        # Obtener timestamps recientes de la IP y limpiar vencidos
+        timestamps = [t for t in _ip_requests.get(client_ip, []) if t > cutoff]
+
+        if len(timestamps) >= MAX_TICKETS_PER_IP_WINDOW:
+            tiempo_espera = int(IP_WINDOW_SECONDS - (now - timestamps[0]))
+            raise BadRequestException(
+                f"Límite de solicitudes por IP excedido. Por favor espera {tiempo_espera} segundos antes de enviar otro ticket."
+            )
+
+        timestamps.append(now)
+        _ip_requests[client_ip] = timestamps
 
     async def validate_ticket_creation(self, correo: str) -> None:
         """

@@ -13,6 +13,7 @@ from ...services.gridfs_service import GridFSService
 from ...core.exceptions import BadRequestException
 from ...core.sse_manager import sse_manager
 from ...core.ticket_lock_manager import ticket_lock_manager
+from ...modules.auth import get_current_user, get_current_admin, User
 
 class LockRequest(BaseModel):
     usuario: str = Field(..., min_length=1, description="Nombre o correo del operador que solicita el bloqueo")
@@ -22,8 +23,9 @@ class UnlockRequest(BaseModel):
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
-@router.post("/", response_model=TicketResponse, status_code=status.HTTP_201_CREATED, summary="Crear un ticket con texto e imágenes opcionales (Con Rollback)")
+@router.post("/", response_model=TicketResponse, status_code=status.HTTP_201_CREATED, summary="Crear un ticket con texto e imágenes opcionales (Público / Blindado)")
 async def create_ticket(
+    request: Request,
     titulo: str = Form(..., min_length=3, max_length=150, description="Título del problema"),
     descripcion: str = Form(..., description="Descripción detallada"),
     correo: EmailStr = Form(..., description="Correo del solicitante"),
@@ -31,6 +33,7 @@ async def create_ticket(
     asignar: Optional[str] = Form(None, description="Técnico asignado (opcional)"),
     columna: Optional[int] = Form(1, description="Columna del ticket (1: Ticket, 2: Hitos, 3: Tareas, 4: Tareas periódicas)"),
     frecuencia: Optional[str] = Form(None, description="Frecuencia periódica en formato JSON: {\"numero\": 1, \"periodo\": \"Semanas\"}"),
+    hp_company_field: Optional[str] = Form(None, description="Campo trampa anti-bot (Honeypot)"),
     files: List[UploadFile] = File(default=[], description="Archivos adjuntos permitidos: imágenes (PNG, JPEG, WebP, GIF, SVG) y documentos (PDF, CSV, XLSX, TXT)"),
     service: TicketService = Depends(),
     gridfs_service: GridFSService = Depends()
@@ -58,16 +61,26 @@ async def create_ticket(
     # Filtrar solo archivos válidos con nombre
     valid_files = [f for f in files if getattr(f, "filename", None)]
 
+    # Extraer IP del cliente
+    forwarded_for = request.headers.get("x-forwarded-for")
+    client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (request.headers.get("x-real-ip") or (request.client.host if request.client else "127.0.0.1"))
+
     return await service.create_ticket_with_rollback(
         ticket_in=ticket_in,
         files=valid_files if valid_files else None,
-        gridfs_service=gridfs_service
+        gridfs_service=gridfs_service,
+        client_ip=client_ip,
+        hp_company_field=hp_company_field
     )
 
-@router.get("/stream", summary="Canal en tiempo real (Server-Sent Events) para nuevos tickets")
-async def ticket_stream(request: Request):
+@router.get("/stream", summary="Canal en tiempo real (Server-Sent Events) para nuevos tickets (Admin)")
+async def ticket_stream(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
     """
     Canal continuo SSE para notificaciones en vivo.
+    Requiere autenticación de operador o administrador.
     Emite eventos 'nuevo_ticket' y comentarios keep-alive ': ping' cada 15 segundos.
     """
     async def event_generator():
@@ -109,7 +122,7 @@ async def ticket_stream(request: Request):
         }
     )
 
-@router.get("/", response_model=TicketPagedResponse, summary="Listar tickets con filtros y paginacion")
+@router.get("/", response_model=TicketPagedResponse, summary="Listar tickets con filtros y paginacion (Admin)")
 async def get_tickets(
     fecha_desde: Optional[str] = Query(None, description="Fecha de inicio (ej: 2026-08-01 o 2026-08-01T14:30:00)"),
     fecha_hasta: Optional[str] = Query(None, description="Fecha fin (ej: 2026-08-31 o 2026-08-31T23:59:59)"),
@@ -122,11 +135,12 @@ async def get_tickets(
     incluir_resueltos: bool = Query(False, description="Incluir tickets resueltos/cerrados. False por defecto (tablero activo)."),
     skip: int = Query(0, ge=0, description="Registros a omitir (offset)"),
     limit: int = Query(50, ge=1, le=200, description="Limite de registros por pagina"),
-    service: TicketService = Depends()
+    service: TicketService = Depends(),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Lista tickets activos con soporte completo de filtros y paginacion.
-
+    Requiere autenticación de operador o administrador.
     Por defecto excluye tickets en estado **resuelto** y **cerrado**.
     Para traer el historial de resueltos, enviar `incluir_resueltos=true`.
     """
@@ -164,14 +178,19 @@ async def get_tickets(
     )
 
 @router.patch("/{id}/read", response_model=TicketResponse, summary="Marcar ticket como leído")
-async def mark_ticket_as_read(id: PydanticObjectId, service: TicketService = Depends()):
+async def mark_ticket_as_read(
+    id: PydanticObjectId,
+    service: TicketService = Depends(),
+    current_user: User = Depends(get_current_user)
+):
     return await service.mark_as_read(id)
 
 @router.post("/{id}/bloquear", summary="Bloquear ticket para edición exclusiva (evita colisiones concurrentes)")
 async def lock_ticket(
     id: PydanticObjectId,
     payload: LockRequest,
-    service: TicketService = Depends()
+    service: TicketService = Depends(),
+    current_user: User = Depends(get_current_user)
 ):
     ticket = await service.get_ticket(id)
     success, lock_info = ticket_lock_manager.acquire_lock(str(id), payload.usuario)
@@ -204,7 +223,8 @@ async def lock_ticket(
 async def unlock_ticket(
     id: PydanticObjectId,
     payload: Optional[UnlockRequest] = None,
-    service: TicketService = Depends()
+    service: TicketService = Depends(),
+    current_user: User = Depends(get_current_user)
 ):
     usuario = payload.usuario if payload else None
     ticket_lock_manager.release_lock(str(id), usuario)
@@ -222,7 +242,8 @@ async def unlock_ticket(
 @router.get("/{id}/bloqueo", summary="Consultar estado de bloqueo de un ticket")
 async def get_ticket_lock_status(
     id: PydanticObjectId,
-    service: TicketService = Depends()
+    service: TicketService = Depends(),
+    current_user: User = Depends(get_current_user)
 ):
     await service.get_ticket(id)
     lock = ticket_lock_manager.is_locked(str(id))
@@ -235,11 +256,20 @@ async def get_ticket_lock_status(
     }
 
 @router.get("/{id}", response_model=TicketResponse, summary="Obtener ticket por ID")
-async def get_ticket(id: PydanticObjectId, service: TicketService = Depends()):
+async def get_ticket(
+    id: PydanticObjectId,
+    service: TicketService = Depends(),
+    current_user: User = Depends(get_current_user)
+):
     return await service.get_ticket(id)
 
 @router.patch("/{id}", response_model=TicketResponse, summary="Actualizar ticket por ID (PATCH)")
-async def update_ticket(id: PydanticObjectId, ticket_in: TicketUpdate, service: TicketService = Depends()):
+async def update_ticket(
+    id: PydanticObjectId,
+    ticket_in: TicketUpdate,
+    service: TicketService = Depends(),
+    current_user: User = Depends(get_current_user)
+):
     return await service.update_ticket(id, ticket_in)
 
 @router.post("/{id}/images", response_model=TicketResponse, summary="Adjuntar una o varias imágenes a un ticket mediante GridFS")
@@ -247,7 +277,8 @@ async def upload_ticket_images(
     id: PydanticObjectId,
     files: List[UploadFile] = File(..., description="Selecciona archivos de imagen permitidos (PNG, JPEG, WebP, GIF, SVG)"),
     ticket_service: TicketService = Depends(),
-    gridfs_service: GridFSService = Depends()
+    gridfs_service: GridFSService = Depends(),
+    current_user: User = Depends(get_current_user)
 ):
     file_ids = await gridfs_service.upload_files(files)
     image_urls = [f"/api/v1/files/{fid}" for fid in file_ids]
@@ -258,7 +289,8 @@ async def delete_ticket_image(
     id: PydanticObjectId,
     file_id: str,
     ticket_service: TicketService = Depends(),
-    gridfs_service: GridFSService = Depends()
+    gridfs_service: GridFSService = Depends(),
+    current_user: User = Depends(get_current_admin)
 ):
     return await ticket_service.remove_image_from_ticket(id, file_id, gridfs_service)
 
@@ -266,6 +298,7 @@ async def delete_ticket_image(
 async def delete_ticket(
     id: PydanticObjectId,
     service: TicketService = Depends(),
-    gridfs_service: GridFSService = Depends()
+    gridfs_service: GridFSService = Depends(),
+    current_user: User = Depends(get_current_admin)
 ):
     await service.delete_ticket(id, gridfs_service)

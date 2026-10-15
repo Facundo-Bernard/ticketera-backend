@@ -4,43 +4,98 @@ services:
     image: caddy:2-alpine
     container_name: ticketcoopya-caddy
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
-      - "8085:8085"                       # Puerto expuesto para TicketCoopya hacia el exterior
+      - "8085:8085"                       # Puerto expuesto hacia Nginx exterior
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile  # Reglas de proxy y ruteo
-      - ./dist:/srv                       # Archivos estáticos del Frontend (React/Vite)
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro  # Reglas de proxy montadas en solo lectura
+      - ./dist:/srv:ro                       # Archivos estáticos montados en solo lectura
+    networks:
+      - web_net                              # Red de acceso web
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy           # Espera a que FastAPI esté 100% sano
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # 2. Backend FastAPI (Python)
   backend:
     build: .
     container_name: ticketcoopya-backend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - .env                              # Carga automática de variables de entorno
     environment:
-      - MONGO_URI=${MONGO_URI:-mongodb://mongodb:27017/tickets_db}
+      - MONGO_URI=mongodb://mongodb:27017/tickets_db
       - MONGO_DB_NAME=${MONGO_DB_NAME:-tickets_db}
       - PORT=8085
+    networks:
+      - web_net                              # Comunicación con Caddy
+      - db_net                               # Comunicación aislada con MongoDB
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 768M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       mongodb:
         condition: service_healthy
 
-  # 3. Base de Datos MongoDB (independiente de mayores-actualizaciones)
+  # 3. Base de Datos MongoDB (Aislada en red interna)
   mongodb:
     image: mongo:7.0
     container_name: ticketcoopya-mongodb  # Nombre propio para evitar colisiones
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - ticketcoopya_mongo_data:/data/db  # Persistencia de datos propia
+    networks:
+      - db_net                               # Aislada: Caddy y el exterior no tienen acceso
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1024M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 5s
+
+networks:
+  web_net:
+    driver: bridge
+  db_net:
+    driver: bridge
+    internal: true                           # Red interna aislada sin salida al exterior
 
 volumes:
   ticketcoopya_mongo_data:

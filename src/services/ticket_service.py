@@ -103,22 +103,38 @@ class TicketService:
         self,
         ticket_in: TicketCreate,
         files: Optional[List[UploadFile]] = None,
-        gridfs_service = None
+        gridfs_service = None,
+        client_ip: Optional[str] = None,
+        hp_company_field: Optional[str] = None
     ) -> Ticket:
-        # Validar Rate Limit y Cooldown ANTES de subir archivos a GridFS
+        # 1. Anti-Bot Honeypot
+        if hp_company_field:
+            self.rate_limit_service.validate_honeypot(hp_company_field)
+
+        # 2. Rate limit por IP (máx 5 cada 10 min)
+        if client_ip:
+            self.rate_limit_service.validate_ip_rate_limit(client_ip)
+
+        # 3. Validar Rate Limit y Cooldown por Correo ANTES de subir archivos a GridFS
         await self.rate_limit_service.validate_ticket_creation(ticket_in.correo)
+
+        # 4. Sanitización básica de inputs de texto (prevenir XSS)
+        if ticket_in.titulo:
+            ticket_in.titulo = ticket_in.titulo.replace("<", "&lt;").replace(">", "&gt;").strip()
+        if ticket_in.descripcion:
+            ticket_in.descripcion = ticket_in.descripcion.replace("<", "&lt;").replace(">", "&gt;").strip()
 
         uploaded_ids = []
         created_ticket = None
         try:
-            # 1. Subir archivos si fueron provistos
+            # Subir archivos si fueron provistos
             if files and gridfs_service:
                 for file in files:
                     if file.filename:
                         fid = await gridfs_service.upload_file(file)
                         uploaded_ids.append(fid)
 
-            # 2. Armar lista de imágenes
+            # Armar lista de imágenes
             image_urls = [f"/api/v1/files/{fid}" for fid in uploaded_ids]
             if ticket_in.imagenes:
                 image_urls.extend(ticket_in.imagenes)

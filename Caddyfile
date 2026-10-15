@@ -37,8 +37,12 @@
     @hidden path */.*
     respond @hidden 404
 
+    # Bloquear rutas de documentación técnica (Swagger / OpenAPI / ReDoc)
+    @docs path /docs* /redoc* /openapi.json
+    respond @docs 404
+
     # Aislamiento de la aplicación mediante Proxy Inverso explícito hacia FastAPI
-    @backend path /api* /health* /docs* /openapi.json /redoc*
+    @backend path /api* /health*
     handle @backend {
         reverse_proxy backend:8085 {
             header_up Host {host}
@@ -53,11 +57,3 @@
         file_server
     }
 }
-
-# OPCIONAL (HTTPS Automático):
-# Si deseas que Caddy gestione automáticamente SSL/TLS con tu dominio DuckDNS:
-# ticketscoopya.duckdns.org:8085 {
-#     tls internal # o tu email para Let's Encrypt / ZeroSSL
-#     encode gzip zstd
-#     reverse_proxy backend:8085
-# }

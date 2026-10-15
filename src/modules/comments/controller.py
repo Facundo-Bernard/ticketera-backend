@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query, status
 from beanie import PydanticObjectId
 from .schemas import CommentCreate, CommentResponse
 from .service import CommentService
+from ..auth import get_current_user, get_current_admin, User
 
 router = APIRouter(prefix="/tickets/{ticket_id}/comments", tags=["Comentarios"])
 
@@ -18,7 +19,8 @@ async def get_comments(
     fecha_hasta: Optional[str] = Query(None, description="Filtrar por fecha hasta (YYYY-MM-DD o ISO)"),
     skip: int = Query(0, ge=0, description="Cantidad de comentarios a omitir"),
     limit: int = Query(10, ge=1, le=100, description="Cantidad de comentarios por lote (por defecto 10)"),
-    service: CommentService = Depends()
+    service: CommentService = Depends(),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Obtiene los comentarios de un ticket utilizando el patrón Bucket con proyección $slice de MongoDB.
@@ -48,7 +50,8 @@ async def get_comments_count(
     autor: Optional[str] = Query(None, description="Filtrar conteo por autor"),
     fecha_desde: Optional[str] = Query(None, description="Filtrar conteo por fecha desde"),
     fecha_hasta: Optional[str] = Query(None, description="Filtrar conteo por fecha hasta"),
-    service: CommentService = Depends()
+    service: CommentService = Depends(),
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Retorna la cantidad de comentarios en el bucket. Sin filtros se resuelve en O(1) leyendo el campo 'total'.
@@ -73,7 +76,8 @@ async def get_comments_count(
 async def create_comment(
     ticket_id: PydanticObjectId,
     comment_in: CommentCreate,
-    service: CommentService = Depends()
+    service: CommentService = Depends(),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Inserta un nuevo comentario en el bucket del ticket mediante $push atómico y emite evento SSE 'nuevo_comentario'.
@@ -83,12 +87,13 @@ async def create_comment(
 @router.delete(
     "/{comment_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Eliminar un comentario del bucket"
+    summary="Eliminar un comentario del bucket (Admin)"
 )
 async def delete_comment(
     ticket_id: PydanticObjectId,
     comment_id: str,
-    service: CommentService = Depends()
+    service: CommentService = Depends(),
+    current_user: User = Depends(get_current_admin)
 ):
     """
     Elimina un comentario del bucket mediante $pull atómico y emite evento SSE 'comentario_eliminado'.

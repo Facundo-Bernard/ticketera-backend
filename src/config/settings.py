@@ -18,9 +18,11 @@ class Settings(BaseSettings):
     ADMIN_EMAILS: List[str] = []
 
     # Configuración de Autenticación y JWT
+    MASTER_ADMIN_EMAIL: str = "admin@sistemas.com"
+    MASTER_ADMIN_PASSWORD: str = "admin123"
     JWT_SECRET_KEY: str = "coopya_sistemas_secret_jwt_key_development_2026"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 365  # 1 año (vencimiento prolongado)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 horas
 
     # Configuracion Web Push (VAPID)
     VAPID_PUBLIC_KEY: str = "BMsXWvjJkRm0nEiE1tXTx9tfaq79Wc7x3_uN4n9xMigcgi_NN1-dI58YwYK5kY8d1xtmGdbQ2oaNg9rOaaRDHbo"
