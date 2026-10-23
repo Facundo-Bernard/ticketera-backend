@@ -17,17 +17,17 @@ class Settings(BaseSettings):
     TICKET_CREATION_COOLDOWN_SECONDS: int = 60
     ADMIN_EMAILS: List[str] = []
 
-    # Configuración de Autenticación y JWT
+    # Configuración de Autenticación y JWT (Debe definirse en .env)
     MASTER_ADMIN_EMAIL: str = "admin@sistemas.com"
-    MASTER_ADMIN_PASSWORD: str = "admin123"
-    JWT_SECRET_KEY: str = "coopya_sistemas_secret_jwt_key_development_2026"
+    MASTER_ADMIN_PASSWORD: str = ""
+    JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 horas
 
-    # Configuracion Web Push (VAPID)
-    VAPID_PUBLIC_KEY: str = "BMsXWvjJkRm0nEiE1tXTx9tfaq79Wc7x3_uN4n9xMigcgi_NN1-dI58YwYK5kY8d1xtmGdbQ2oaNg9rOaaRDHbo"
-    VAPID_PRIVATE_KEY: str = "mQ-RRqbL4rhbOm9YOom3MTOU3IWmFY-0DwjFgF5qCeU"
-    VAPID_CLAIMS_EMAIL: str = "admin@coopya.com"
+    # Configuración Web Push (VAPID) (Debe definirse en .env)
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_CLAIMS_EMAIL: str = ""
 
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")

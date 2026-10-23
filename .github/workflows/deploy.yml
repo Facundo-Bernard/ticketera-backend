@@ -1,0 +1,19 @@
+name: Deploy Ticketera Backend
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: 📥 Clonar código del repositorio
+        uses: actions/checkout@v4
+
+      - name: 🚀 Rebuild y Despliegue de Backend FastAPI
+        run: |
+          docker compose up -d --build --remove-orphans

@@ -26,15 +26,21 @@
 
         # Restricción de APIs sensibles del navegador
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
+        # Forzar transporte seguro (HSTS)
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     }
 
     # Protección contra Payloads excesivos (Anti-DoS / mitigación de desbordamiento de memoria)
     request_body {
-        max_size 30MB
+        max_size 10MB
     }
 
     # Bloquear acceso a archivos y directorios ocultos (.env, .git, etc.)
-    @hidden path */.*
+    @hidden {
+        path */.*
+        path .*
+    }
     respond @hidden 404
 
     # Bloquear rutas de documentación técnica (Swagger / OpenAPI / ReDoc)
@@ -42,7 +48,7 @@
     respond @docs 404
 
     # Aislamiento de la aplicación mediante Proxy Inverso explícito hacia FastAPI
-    @backend path /api* /health*
+    @backend path /api/* /health*
     handle @backend {
         reverse_proxy backend:8085 {
             header_up Host {host}

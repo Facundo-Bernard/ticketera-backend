@@ -8,7 +8,7 @@ from ..config.settings import settings
 from ..core.exceptions import NotFoundException, BadRequestException
 
 ALLOWED_FILE_TYPES = {
-    # Imágenes
+    # Imágenes seguras (sin SVG para prevenir Stored XSS)
     "image/jpeg",
     "image/jpg",
     "image/png",
@@ -16,7 +16,6 @@ ALLOWED_FILE_TYPES = {
     "image/gif",
     "image/avif",
     "image/bmp",
-    "image/svg+xml",
     # Documentos
     "application/pdf",
     "text/csv",
@@ -27,8 +26,8 @@ ALLOWED_FILE_TYPES = {
 }
 
 ALLOWED_FILE_EXTENSIONS = {
-    # Imágenes
-    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp", ".svg",
+    # Imágenes seguras (SVG excluido)
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp",
     # Documentos
     ".pdf", ".csv", ".xlsx", ".xls", ".txt"
 }
@@ -48,7 +47,6 @@ MIME_BY_EXTENSION = {
     ".jpeg": "image/jpeg",
     ".webp": "image/webp",
     ".gif": "image/gif",
-    ".svg": "image/svg+xml",
     ".bmp": "image/bmp",
     ".avif": "image/avif",
 }
@@ -73,13 +71,15 @@ class GridFSService:
         content_type = (file.content_type or "").lower()
         ext = os.path.splitext(filename.lower())[1]
 
-        # Validar si es imagen o documento por content_type o por extensión
-        is_valid_type = content_type in ALLOWED_FILE_TYPES or content_type.startswith("image/")
+        # Validar coherencia estricta: tanto la extensión como el tipo MIME deben ser permitidos
         is_valid_ext = ext in ALLOWED_FILE_EXTENSIONS
+        is_valid_type = content_type in ALLOWED_FILE_TYPES or (
+            content_type.startswith("image/") and ext in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp"}
+        )
 
-        if not (is_valid_type or is_valid_ext):
+        if not (is_valid_type and is_valid_ext):
             raise BadRequestException(
-                f"El archivo '{filename}' no tiene un formato permitido. Solo se permiten imágenes (PNG, JPEG, WebP, etc.) y documentos (PDF, CSV, XLSX, TXT)."
+                f"El archivo '{filename}' no tiene un formato seguro o permitido. Solo se permiten imágenes estáticas (PNG, JPEG, WebP, etc.) y documentos (PDF, CSV, XLSX, TXT). Los archivos SVG o ejecutables están estrictamente prohibidos."
             )
 
         # Si el content_type es genérico u omitido, deducirlo por la extensión

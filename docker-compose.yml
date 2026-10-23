@@ -1,39 +1,5 @@
 services:
-  # 1. Portero Web y Reverse Proxy (sirve el Frontend y redirige las APIs)
-  caddy:
-    image: caddy:2-alpine
-    container_name: ticketcoopya-caddy
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    ports:
-      - "8085:8085"                       # Puerto expuesto hacia Nginx exterior
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro  # Reglas de proxy montadas en solo lectura
-      - ./dist:/srv:ro                       # Archivos estáticos montados en solo lectura
-    networks:
-      - web_net                              # Red de acceso web
-      - asistodo_shared_net                  # Red compartida interna para comunicación entre contenedores
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    depends_on:
-      backend:
-        condition: service_healthy           # Espera a que FastAPI esté 100% sano
-    healthcheck:
-      test: ["CMD", "caddy", "version"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  # 2. Backend FastAPI (Python)
+  # Backend FastAPI (Python)
   backend:
     build: .
     container_name: ticketcoopya-backend
@@ -41,14 +7,13 @@ services:
     security_opt:
       - no-new-privileges:true
     env_file:
-      - .env                              # Carga automática de variables de entorno
+      - .env                              # Carga automática de todas las variables de entorno
     environment:
-      - MONGO_URI=mongodb://mongodb:27017/tickets_db
-      - MONGO_DB_NAME=${MONGO_DB_NAME:-tickets_db}
       - PORT=8085
     networks:
-      - web_net                              # Comunicación con Caddy
-      - db_net                               # Comunicación aislada con MongoDB
+      - web_net                              # Comunicación local
+      - asistodo_shared_net                  # Comunicación con ambos Caddys de frontends
+      - red-mongo-compartida                 # Conexión aislada a MongoDB en contenedor independiente
     deploy:
       resources:
         limits:
@@ -59,47 +24,19 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    depends_on:
-      mongodb:
-        condition: service_healthy
-
-  # 3. Base de Datos MongoDB (Aislada en red interna)
-  mongodb:
-    image: mongo:7.0
-    container_name: ticketcoopya-mongodb  # Nombre propio para evitar colisiones
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      - ticketcoopya_mongo_data:/data/db  # Persistencia de datos propia
-    networks:
-      - db_net                               # Aislada: Caddy y el exterior no tienen acceso
-    deploy:
-      resources:
-        limits:
-          cpus: '1.00'
-          memory: 1024M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
+      test: ["CMD-SHELL", "curl -f http://localhost:8085/health || exit 1"]
+      interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 5s
+      retries: 3
+      start_period: 10s
 
 networks:
   web_net:
     driver: bridge
-  db_net:
-    driver: bridge
-    internal: true                           # Red interna aislada sin salida al exterior
   asistodo_shared_net:
     name: asistodo_shared_net
     external: true                           # Red Docker externa compartida con asistodoweb
-
-volumes:
-  ticketcoopya_mongo_data:
+  red-mongo-compartida:
+    name: red-mongo-compartida
+    external: true                           # Red Docker externa compartida para base de datos MongoDB

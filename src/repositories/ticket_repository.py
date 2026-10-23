@@ -1,3 +1,4 @@
+import re
 from typing import List, Dict, Any, Tuple
 from .base_repository import BaseRepository
 from ..models.ticket_model import Ticket
@@ -32,13 +33,15 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
             query["leido"] = filters["leido"]
 
         if filters.get("asignar"):
-            query["asignar"] = {"$regex": filters["asignar"], "$options": "i"}
+            safe_asignar = re.escape(str(filters["asignar"]).strip())
+            query["asignar"] = {"$regex": safe_asignar, "$options": "i"}
 
-        # Filtro de busqueda libre por titulo o descripcion
+        # Filtro de busqueda libre por titulo o descripcion (escapado contra ReDoS)
         if filters.get("q"):
+            safe_q = re.escape(str(filters["q"]).strip())
             query["$or"] = [
-                {"titulo": {"$regex": filters["q"], "$options": "i"}},
-                {"descripcion": {"$regex": filters["q"], "$options": "i"}},
+                {"titulo": {"$regex": safe_q, "$options": "i"}},
+                {"descripcion": {"$regex": safe_q, "$options": "i"}},
             ]
 
         fecha_desde_parsed = parse_date_filter(filters.get("fecha_desde"), is_end_date=False)

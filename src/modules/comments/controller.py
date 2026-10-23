@@ -81,7 +81,9 @@ async def create_comment(
 ):
     """
     Inserta un nuevo comentario en el bucket del ticket mediante $push atómico y emite evento SSE 'nuevo_comentario'.
+    Seguridad: Se fuerza el autor a la identidad del usuario autenticado para impedir falsificación de autor.
     """
+    comment_in.autor = current_user.email or current_user.nombre or "Operador"
     return await service.add_comment(ticket_id, comment_in)
 
 @router.delete(

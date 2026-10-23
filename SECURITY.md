@@ -23,10 +23,10 @@ graph TD
             Caddy["Caddy (Puerto 8085)<br>• Reverse proxy<br>• Security headers<br>• Servidor estático SPA"]
             Backend["FastAPI Backend<br>• Uvicorn (Puerto 8085)<br>• Usuario no-root (UID 10001)"]
         end
+    end
 
-        subgraph DbNet ["Red db_net (Bridge Internal: True)"]
-            MongoDB[("MongoDB 7.0<br>• Aislada sin salida a internet<br>• Sin puerto expuesto al host")]
-        end
+    subgraph MongoNetwork ["Red red-mongo-compartida (Bridge Externa)"]
+        MongoDB[("MongoDB 7.0 (Contenedor Independiente)<br>• Aislada en red compartida<br>• Sin puerto expuesto al exterior")]
     end
 
     Client -->|"HTTPS (Cifrado TLS)"| Nginx
@@ -60,26 +60,24 @@ Caddy actúa como la primera línea de defensa interna para el backend y el fron
 La infraestructura de contenedores cumple con los 6 estándares de hardening recomendados:
 
 1. **Prevención de escalada de privilegios (`no-new-privileges:true`)**:
-   - Activo en `caddy`, `backend` y `mongodb`. Impide que los binarios dentro del contenedor obtengan privilegios adicionales mediante `setuid`/`setgid`.
+   - Activo en `caddy` y `backend`. Impide que los binarios dentro del contenedor obtengan privilegios adicionales mediante `setuid`/`setgid`.
 2. **Ejecución como usuario sin privilegios (Non-Root)**:
    - El backend corre bajo el usuario de sistema `appuser` (UID `10001`, GID `10001`) con shell `/sbin/nologin`.
 3. **Límites de recursos (CPU y Memoria)**:
    - `caddy`: 0.50 CPU, 256 MB RAM.
    - `backend`: 1.00 CPU, 768 MB RAM.
-   - `mongodb`: 1.00 CPU, 1024 MB RAM.
    - *Garantiza que un proceso con fuga o consumo elevado no desestabilice el sistema anfitrión.*
 4. **Rotación y límites de logs (`logging`)**:
    - Todos los servicios utilizan el driver `json-file` con `max-size: "10m"` y `max-file: "3"`, impidiendo el llenado accidental del disco por logs.
 5. **Aislamiento de redes (`networks`)**:
    - `web_net`: Conecta Caddy con Backend para resolver peticiones web.
-   - `db_net`: Red con directiva `internal: true`. Conecta exclusivamente el Backend con MongoDB. MongoDB **no** posee puertos publicados en el host ni visibilidad desde Caddy ni desde el exterior.
+   - `red-mongo-compartida`: Red Docker externa dedicada exclusivamente a la comunicación entre el Backend y el contenedor independiente de MongoDB.
 6. **Volúmenes en solo lectura (`:ro`)**:
    - El archivo `./Caddyfile` se monta en `/etc/caddy/Caddyfile:ro`.
    - La carpeta compilada `./dist` se monta en `/srv:ro`.
 7. **Healthchecks activos y encadenamiento seguro**:
-   - `mongodb`: Ejecuta `mongosh --eval "db.adminCommand('ping')"` cada 5s.
-   - `backend`: Depende de `mongodb` con `condition: service_healthy`.
-   - `caddy`: Depende de `backend` con `condition: service_healthy` y verifica su salud cada 30s.
+   - `backend`: Posee healthcheck con `curl -f http://localhost:8085/health`.
+   - `caddy`: Depende de `backend` con `condition: service_healthy` y verifica su salud contra el endpoint `/health` cada 30s.
 
 ---
 
