@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from beanie import PydanticObjectId
 from ...core.exceptions import UnauthorizedException, ForbiddenException
@@ -10,18 +10,22 @@ from .repository import UserRepository
 bearer_scheme = HTTPBearer(auto_error=False)
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     token: Optional[str] = None,
     repository: UserRepository = Depends()
 ) -> User:
     """
-    Dependencia de FastAPI que valida el token JWT Bearer del encabezado Authorization
-    o mediante el parámetro query 'token' (ideal para EventSource SSE).
+    Dependencia de FastAPI que valida la autenticación:
+    1. Prioridad: Cookie segura HttpOnly 'coopya_auth_token' (segura contra XSS).
+    2. Fallback: Encabezado 'Authorization: Bearer <token>' (para clientes API/Postman).
+    3. Fallback: Parámetro query 'token' (compatibilidad transitoria).
     Verifica firma, expiración y vigencia del usuario en MongoDB.
     """
-    auth_token = credentials.credentials if credentials else token
+    cookie_token = request.cookies.get("coopya_auth_token")
+    auth_token = cookie_token or (credentials.credentials if credentials else token)
     if not auth_token:
-        raise UnauthorizedException("Se requiere token de autenticación")
+        raise UnauthorizedException("Se requiere sesión o token de autenticación")
 
     try:
         payload = decode_access_token(auth_token)

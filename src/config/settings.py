@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 horas
+    COOKIE_SECURE: bool = False
 
     # Configuración Web Push (VAPID) (Debe definirse en .env)
     VAPID_PUBLIC_KEY: str = ""
