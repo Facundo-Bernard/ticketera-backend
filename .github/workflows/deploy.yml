@@ -16,6 +16,12 @@ jobs:
         with:
           clean: false
 
+      - name: ⚙️ Asegurar archivo .env desde el servidor
+        run: |
+          if [ ! -f .env ] && [ -f /home/serverportable/Documentos/Ticketera/ticketera-backend/.env ]; then
+            cp /home/serverportable/Documentos/Ticketera/ticketera-backend/.env .env
+          fi
+
       - name: 🚀 Rebuild y Despliegue de Backend FastAPI
         run: |
           docker compose up -d --build --remove-orphans
