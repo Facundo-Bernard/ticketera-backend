@@ -6,8 +6,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Tickets API"
-    MONGO_URI: str = "mongodb://localhost:27017/tickets_db"
+    
+    # Configuración de Base de Datos MongoDB
+    MONGO_ROOT_USER: str = ""
+    MONGO_ROOT_PASSWORD: str = ""
+    MONGO_HOST: str = "mongodb-central"
+    MONGO_PORT: int = 27017
     MONGO_DB_NAME: str = "tickets_db"
+    MONGO_AUTH_SOURCE: str = "admin"
+    MONGO_URI: str = ""
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.MONGO_URI:
+            if self.MONGO_ROOT_USER and self.MONGO_ROOT_PASSWORD:
+                self.MONGO_URI = f"mongodb://{self.MONGO_ROOT_USER}:{self.MONGO_ROOT_PASSWORD}@{self.MONGO_HOST}:{self.MONGO_PORT}/{self.MONGO_DB_NAME}?authSource={self.MONGO_AUTH_SOURCE}"
+            else:
+                self.MONGO_URI = f"mongodb://{self.MONGO_HOST}:{self.MONGO_PORT}/{self.MONGO_DB_NAME}"
     
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
