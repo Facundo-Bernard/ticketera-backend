@@ -30,7 +30,7 @@ async def create_ticket(
     descripcion: str = Form(..., description="Descripción detallada"),
     correo: EmailStr = Form(..., description="Correo del solicitante"),
     prioridad: PrioridadEnum = Form(PrioridadEnum.MEDIA, description="Prioridad del ticket"),
-    asignar: Optional[str] = Form(None, description="Técnico asignado (opcional)"),
+    asignar: Optional[List[str]] = Form(default=None, description="Técnicos asignados (uno o varios valores, JSON array o separados por coma)"),
     columna: Optional[int] = Form(1, description="Columna del ticket (1: Ticket, 2: Hitos, 3: Tareas, 4: Tareas periódicas)"),
     frecuencia: Optional[str] = Form(None, description="Frecuencia periódica en formato JSON: {\"numero\": 1, \"periodo\": \"Semanas\"}"),
     hp_company_field: Optional[str] = Form(None, description="Campo trampa anti-bot (Honeypot)"),
@@ -54,7 +54,7 @@ async def create_ticket(
         descripcion=descripcion,
         correo=correo,
         prioridad=prioridad,
-        asignar=asignar,
+        asignar=asignar or [],
         columna=columna or 1,
         frecuencia=frecuencia_obj
     )

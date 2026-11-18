@@ -33,8 +33,10 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
             query["leido"] = filters["leido"]
 
         if filters.get("asignar"):
-            safe_asignar = re.escape(str(filters["asignar"]).strip())
-            query["asignar"] = {"$regex": safe_asignar, "$options": "i"}
+            terms = [re.escape(t.strip()) for t in str(filters["asignar"]).split(",") if t.strip()]
+            if terms:
+                pattern = "|".join(terms)
+                query["asignar"] = {"$regex": pattern, "$options": "i"}
 
         # Filtro de busqueda libre por titulo o descripcion (escapado contra ReDoS)
         if filters.get("q"):
