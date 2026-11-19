@@ -14,6 +14,7 @@ except ImportError:
 
 from starlette.testclient import TestClient
 from src.main import app
+from tests.conftest import login_admin_headers
 
 @fixture_decorator
 def client():
@@ -21,11 +22,8 @@ def client():
         yield test_client
 
 def get_auth_headers(client):
-    """Obtiene la cabecera Bearer Token usando el usuario admin genérico."""
-    res_login = client.post("/api/v1/auth/login", json={"email": "admin@coopya.com", "password": "admin"})
-    assert res_login.status_code == 200, f"Error en login admin: {res_login.text}"
-    token = res_login.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    """Obtiene la cabecera Bearer Token usando el usuario admin de pruebas."""
+    return login_admin_headers(client)
 
 def test_create_and_get_candidato_with_papeleria_pdf_flow(client):
     auth_headers = get_auth_headers(client)
@@ -187,6 +185,21 @@ def test_candidato_validation_and_file_errors(client):
     )
     assert res_bad_file.status_code == 400
     assert "no tiene un formato permitido" in res_bad_file.json().get("message", "")
+
+    # 5. SVG disfrazado como image/* debe rechazarse para prevenir Stored XSS
+    res_svg = client.post(
+        "/api/v1/candidatos",
+        data={"data": json.dumps(valid_payload)},
+        files={"papeleria": ("xss.svg", b"<svg onload=alert(1)/>", "image/svg+xml")}
+    )
+    assert res_svg.status_code == 400
+
+    res_svg_spoof = client.post(
+        "/api/v1/candidatos",
+        data={"data": json.dumps(valid_payload)},
+        files={"papeleria": ("xss.svg", b"<svg onload=alert(1)/>", "image/png")}
+    )
+    assert res_svg_spoof.status_code == 400
 
 def test_delete_candidato_with_papeleria_cascade_flow(client):
     auth_headers = get_auth_headers(client)

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from beanie import PydanticObjectId
 from pydantic import BaseModel
 from ...repositories.base_repository import BaseRepository
@@ -17,3 +17,7 @@ class UserRepository(BaseRepository[User, BaseModel, BaseModel]):
         Busca un usuario por su correo electrónico (case-insensitive).
         """
         return await self.model.find_one(self.model.email == email.lower().strip())
+
+    async def list_all_ordered(self) -> List[User]:
+        """Retorna todos los usuarios ordenados por fecha de creación descendente."""
+        return await self.model.find_all().sort("-fechaCreacion").to_list()

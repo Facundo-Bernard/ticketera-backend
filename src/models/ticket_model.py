@@ -4,6 +4,7 @@ from typing import Any, Optional, List, Literal
 from datetime import datetime, timezone
 from beanie import Document, Indexed
 from pydantic import BaseModel, Field, EmailStr, field_validator
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 
 def normalize_asignados(value: Any) -> List[str]:
@@ -80,4 +81,9 @@ class Ticket(Document):
 
     class Settings:
         name = "tickets"
+        indexes = [
+            IndexModel([("columna", ASCENDING), ("estado", ASCENDING), ("fecha_creacion", DESCENDING)]),
+            IndexModel([("correo", ASCENDING), ("fecha_creacion", DESCENDING)]),
+            IndexModel([("fecha_creacion", DESCENDING)]),
+        ]
 

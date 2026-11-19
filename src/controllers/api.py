@@ -4,6 +4,7 @@ from ..modules.comments import comments_router
 from ..modules.candidatos import candidatos_router
 from ..modules.auth import auth_router
 from ..modules.notifications import notifications_router
+from ..modules.requester import requester_router
 
 router = APIRouter(prefix="/api/v1")
 
@@ -14,4 +15,5 @@ router.include_router(comments_router)
 router.include_router(candidatos_router)
 router.include_router(auth_router)
 router.include_router(notifications_router)
+router.include_router(requester_router)
 

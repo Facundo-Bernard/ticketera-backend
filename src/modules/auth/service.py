@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 from fastapi import Depends
 from beanie import PydanticObjectId
+from ...config.settings import settings
 from ...core.exceptions import BadRequestException, UnauthorizedException, NotFoundException
 from .model import User
-from .schemas import UserRegister, UserLogin, TokenResponse, UserResponse
+from .schemas import UserRegister, UserUpdate, UserLogin, TokenResponse, UserResponse
 from .security import hash_password, verify_password, create_access_token
 from .repository import UserRepository
 
@@ -75,3 +76,55 @@ class AuthService:
         if not user:
             raise NotFoundException("Usuario no encontrado")
         return user
+
+    async def list_users(self) -> List[User]:
+        """Lista todos los operadores y administradores registrados."""
+        return await self.repository.list_all_ordered()
+
+    async def update_user(
+        self,
+        user_id: PydanticObjectId,
+        data: UserUpdate,
+        acting_admin: User,
+    ) -> User:
+        """Actualiza nombre, rol, estado o contraseña de un usuario protegiendo al admin actual/maestro."""
+        user = await self.get_user_by_id(user_id)
+        master_email = settings.MASTER_ADMIN_EMAIL.strip().lower()
+        is_self = user.id == acting_admin.id
+        is_master = user.email.lower() == master_email
+
+        if data.activo is False and (is_self or is_master):
+            raise BadRequestException("No podés desactivar tu propia cuenta ni la cuenta administrativa principal.")
+
+        if data.rol is not None and data.rol != "admin" and (is_self or is_master):
+            raise BadRequestException("No podés quitar el rol de administrador a tu cuenta ni a la cuenta principal.")
+
+        if data.nombre is not None:
+            clean_name = data.nombre.strip()
+            if len(clean_name) < 2:
+                raise BadRequestException("El nombre debe tener al menos 2 caracteres.")
+            user.nombre = clean_name
+
+        if data.rol is not None:
+            user.rol = data.rol
+
+        if data.activo is not None:
+            user.activo = data.activo
+
+        if data.password:
+            user.hashed_password = hash_password(data.password)
+
+        await user.save()
+        return user
+
+    async def delete_user(self, user_id: PydanticObjectId, acting_admin: User) -> None:
+        """Elimina un operador protegiendo la cuenta propia y la cuenta maestra."""
+        user = await self.get_user_by_id(user_id)
+        master_email = settings.MASTER_ADMIN_EMAIL.strip().lower()
+
+        if user.id == acting_admin.id:
+            raise BadRequestException("No podés eliminar tu propia cuenta mientras estás autenticado.")
+        if user.email.lower() == master_email:
+            raise BadRequestException("No se puede eliminar la cuenta administrativa principal.")
+
+        await self.repository.delete(user_id)

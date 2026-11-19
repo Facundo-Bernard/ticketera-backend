@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional, Dict, Any
 from fastapi import Depends
 from beanie import PydanticObjectId
@@ -6,6 +7,8 @@ from ...core.sse_manager import sse_manager
 from ...models.ticket_model import Ticket
 from .schemas import CommentCreate, CommentResponse
 from .repository import CommentRepository
+
+logger = logging.getLogger(__name__)
 
 class CommentService:
     def __init__(self, repository: CommentRepository = Depends()):
@@ -80,15 +83,15 @@ class CommentService:
         })
         try:
             from ..notifications import NotificationService
-            autor_nombre = comment_in.autor_nombre or "Operador"
-            preview = comment_in.contenido[:80] + ("..." if len(comment_in.contenido) > 80 else "")
+            autor_nombre = saved_item.autor or "Operador"
+            preview = saved_item.mensaje[:80] + ("..." if len(saved_item.mensaje) > 80 else "")
             await NotificationService.broadcast({
                 "title": "💬 Nuevo comentario en Ticket",
                 "body": f"{autor_nombre}: {preview}",
                 "url": "/"
             })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(f"No se pudo enviar notificación push de comentario en ticket {ticket_id}: {exc}")
 
         return CommentResponse(
             id=saved_item.id,

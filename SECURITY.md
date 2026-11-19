@@ -141,7 +141,7 @@ Para mantener el formulario de tickets público sin comprometer el servicio, ope
 
 En el servicio de subida (`GridFSService`) se aplican validaciones estrictas:
 
-* **Formatos de Imagen Permitidos**: PNG, JPEG, JPG, WebP, GIF, AVIF, BMP, SVG (`image/*`).
+* **Formatos de Imagen Permitidos**: PNG, JPEG, JPG, WebP, GIF, AVIF, BMP (`SVG` bloqueado contra Stored XSS).
 * **Formatos de Documento Permitidos**: PDF (`application/pdf`), planillas Excel (`.xlsx`, `.xls`), archivos de datos (`.csv`), texto plano (`.txt`).
 * **Tamaño Máximo Backend**: 25 MB por archivo.
 * **Tope en Servidor Web (Caddy)**: 10 MB para todo el cuerpo de la petición.

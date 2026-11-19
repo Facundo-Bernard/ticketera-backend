@@ -12,6 +12,16 @@ class UserRegister(BaseModel):
     nombre: str = Field(..., min_length=2, max_length=120, description="Nombre completo del usuario")
     rol: str = Field(default="operador", pattern="^(admin|operador)$", description="Rol ('admin' u 'operador')")
 
+
+class UserUpdate(BaseModel):
+    """
+    Esquema para actualizar datos, rol, estado o contraseña de un operador.
+    """
+    nombre: Optional[str] = Field(None, min_length=2, max_length=120)
+    rol: Optional[str] = Field(None, pattern="^(admin|operador)$")
+    activo: Optional[bool] = None
+    password: Optional[str] = Field(None, min_length=3, max_length=100)
+
 class UserLogin(BaseModel):
     """
     Esquema de credenciales para iniciar sesión.

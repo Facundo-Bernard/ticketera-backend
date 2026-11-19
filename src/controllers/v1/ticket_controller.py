@@ -1,6 +1,6 @@
 import asyncio
 import json
-from fastapi import APIRouter, Depends, status, UploadFile, File, Form, Query, Request, HTTPException
+from fastapi import APIRouter, Depends, status, UploadFile, File, Form, Query, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import List, Optional, Union
 from datetime import datetime, timezone
@@ -14,6 +14,7 @@ from ...core.exceptions import BadRequestException
 from ...core.sse_manager import sse_manager
 from ...core.ticket_lock_manager import ticket_lock_manager
 from ...modules.auth import get_current_user, get_current_admin, User
+from ...modules.requester.security import append_ticket_to_requester_cookie, extract_requester_context
 
 class LockRequest(BaseModel):
     usuario: str = Field(..., min_length=1, description="Nombre o correo del operador que solicita el bloqueo")
@@ -26,6 +27,7 @@ router = APIRouter(prefix="/tickets", tags=["Tickets"])
 @router.post("/", response_model=TicketResponse, status_code=status.HTTP_201_CREATED, summary="Crear un ticket con texto e imágenes opcionales (Público / Blindado)")
 async def create_ticket(
     request: Request,
+    response: Response,
     titulo: str = Form(..., min_length=3, max_length=150, description="Título del problema"),
     descripcion: str = Form(..., description="Descripción detallada"),
     correo: EmailStr = Form(..., description="Correo del solicitante"),
@@ -34,7 +36,8 @@ async def create_ticket(
     columna: Optional[int] = Form(1, description="Columna del ticket (1: Ticket, 2: Hitos, 3: Tareas, 4: Tareas periódicas)"),
     frecuencia: Optional[str] = Form(None, description="Frecuencia periódica en formato JSON: {\"numero\": 1, \"periodo\": \"Semanas\"}"),
     hp_company_field: Optional[str] = Form(None, description="Campo trampa anti-bot (Honeypot)"),
-    files: List[UploadFile] = File(default=[], description="Archivos adjuntos permitidos: imágenes (PNG, JPEG, WebP, GIF, SVG) y documentos (PDF, CSV, XLSX, TXT)"),
+    registrar_seguimiento: bool = Form(default=False, description="Guardar ticket en cookie de seguimiento local del navegador"),
+    files: List[UploadFile] = File(default=[], description="Archivos adjuntos permitidos: imágenes estáticas (PNG, JPEG, WebP, GIF, AVIF, BMP) y documentos (PDF, CSV, XLSX, TXT)"),
     service: TicketService = Depends(),
     gridfs_service: GridFSService = Depends()
 ):
@@ -58,6 +61,16 @@ async def create_ticket(
         columna=columna or 1,
         frecuencia=frecuencia_obj
     )
+    is_anonymous_caller = (
+        not request.cookies.get("coopya_auth_token")
+        and not request.headers.get("authorization")
+    )
+    requester_ctx = extract_requester_context(request)
+    if (is_anonymous_caller or registrar_seguimiento) and requester_ctx.email and str(correo).strip().lower() != requester_ctx.email:
+        raise BadRequestException(
+            f"Tenés la sesión vinculada a {requester_ctx.email}. Desvinculá tu historial para enviar un ticket con otro correo."
+        )
+
     # Filtrar solo archivos válidos con nombre
     valid_files = [f for f in files if getattr(f, "filename", None)]
 
@@ -65,13 +78,18 @@ async def create_ticket(
     forwarded_for = request.headers.get("x-forwarded-for")
     client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (request.headers.get("x-real-ip") or (request.client.host if request.client else "127.0.0.1"))
 
-    return await service.create_ticket_with_rollback(
+    created = await service.create_ticket_with_rollback(
         ticket_in=ticket_in,
         files=valid_files if valid_files else None,
         gridfs_service=gridfs_service,
         client_ip=client_ip,
         hp_company_field=hp_company_field
     )
+
+    if registrar_seguimiento or is_anonymous_caller:
+        append_ticket_to_requester_cookie(request, response, str(created.id))
+
+    return created
 
 @router.get("/stream", summary="Canal en tiempo real (Server-Sent Events) para nuevos tickets (Admin)")
 async def ticket_stream(
@@ -83,9 +101,20 @@ async def ticket_stream(
     Requiere autenticación de operador o administrador.
     Emite eventos 'nuevo_ticket' y comentarios keep-alive ': ping' cada 15 segundos.
     """
-    async def event_generator():
-        queue = await sse_manager.subscribe()
+    last_event_id: Optional[int] = None
+    raw_last_id = request.headers.get("last-event-id")
+    if raw_last_id:
         try:
+            last_event_id = int(raw_last_id.strip())
+        except ValueError:
+            last_event_id = None
+
+    async def event_generator():
+        queue = await sse_manager.subscribe(last_event_id=last_event_id)
+        try:
+            # Confirmación inicial inmediata para evitar buffering en proxies
+            yield ": connected\n\n"
+
             # Emitir inmediatamente al cliente recien conectado todos los bloqueos activos
             active_locks = ticket_lock_manager.get_active_locks()
             for t_id, lock in active_locks.items():
@@ -104,10 +133,12 @@ async def ticket_stream(
                     # Esperar evento con timeout de 15 segundos para keep-alive ping
                     item = await asyncio.wait_for(queue.get(), timeout=15.0)
                     event = item.get("event", "nuevo_ticket")
+                    event_id = item.get("id")
                     data_str = json.dumps(item.get("data", {}))
-                    yield f"event: {event}\ndata: {data_str}\n\n"
+                    id_line = f"id: {event_id}\n" if event_id is not None else ""
+                    yield f"{id_line}event: {event}\ndata: {data_str}\n\n"
                 except asyncio.TimeoutError:
-                    # Keep-alive ping para evitar que Railway o proxies cierren la conexión
+                    # Keep-alive ping para evitar que proxies cierren la conexión
                     yield ": ping\n\n"
         finally:
             sse_manager.unsubscribe(queue)
@@ -275,7 +306,7 @@ async def update_ticket(
 @router.post("/{id}/images", response_model=TicketResponse, summary="Adjuntar una o varias imágenes a un ticket mediante GridFS")
 async def upload_ticket_images(
     id: PydanticObjectId,
-    files: List[UploadFile] = File(..., description="Selecciona archivos de imagen permitidos (PNG, JPEG, WebP, GIF, SVG)"),
+    files: List[UploadFile] = File(..., description="Selecciona archivos permitidos (PNG, JPEG, WebP, GIF, AVIF, BMP, PDF, CSV, XLSX, TXT)"),
     ticket_service: TicketService = Depends(),
     gridfs_service: GridFSService = Depends(),
     current_user: User = Depends(get_current_user)

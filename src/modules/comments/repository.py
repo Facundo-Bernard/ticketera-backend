@@ -1,3 +1,4 @@
+import re
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from beanie import PydanticObjectId
@@ -45,6 +46,32 @@ class CommentRepository(BaseRepository[CommentBucket, CommentCreate, CommentUpda
         )
         return new_item
 
+    def _build_filter_expr(self, filters: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Construye la expresión $filter de agregación escapando regex para prevenir ReDoS."""
+        autor_filter = filters.get("autor")
+        fecha_desde = parse_date_filter(filters.get("fecha_desde"), is_end_date=False)
+        fecha_hasta = parse_date_filter(filters.get("fecha_hasta"), is_end_date=True)
+
+        conds: List[Dict[str, Any]] = []
+        if autor_filter:
+            safe_autor = re.escape(str(autor_filter).strip())
+            if safe_autor:
+                conds.append({
+                    "$regexMatch": {
+                        "input": "$$c.autor",
+                        "regex": safe_autor,
+                        "options": "i"
+                    }
+                })
+        if fecha_desde:
+            conds.append({"$gte": ["$$c.fecha_creacion", fecha_desde]})
+        if fecha_hasta:
+            conds.append({"$lte": ["$$c.fecha_creacion", fecha_hasta]})
+
+        if not conds:
+            return None
+        return {"$and": conds} if len(conds) > 1 else conds[0]
+
     async def get_comments(
         self,
         ticket_id: PydanticObjectId,
@@ -57,15 +84,9 @@ class CommentRepository(BaseRepository[CommentBucket, CommentCreate, CommentUpda
         Si se especifican filtros (autor, fechas), ejecuta una agregación con $filter nativo en el motor.
         """
         col = self.model.get_pymongo_collection()
-        filters = filters or {}
+        filter_expr = self._build_filter_expr(filters or {})
 
-        autor_filter = filters.get("autor")
-        fecha_desde = parse_date_filter(filters.get("fecha_desde"), is_end_date=False)
-        fecha_hasta = parse_date_filter(filters.get("fecha_hasta"), is_end_date=True)
-
-        has_criteria = bool(autor_filter or fecha_desde or fecha_hasta)
-
-        if not has_criteria:
+        if filter_expr is None:
             # Camino de ultra-alto rendimiento: proyección $slice directa de MongoDB
             doc = await col.find_one(
                 {"ticket_id": ticket_id},
@@ -74,23 +95,6 @@ class CommentRepository(BaseRepository[CommentBucket, CommentCreate, CommentUpda
             if not doc or "comentarios" not in doc:
                 return []
             return [CommentItem(**c) for c in doc["comentarios"]]
-
-        # Camino con filtros: Agregación con $filter y $slice en MongoDB
-        conds = []
-        if autor_filter:
-            conds.append({
-                "$regexMatch": {
-                    "input": "$$c.autor",
-                    "regex": autor_filter,
-                    "options": "i"
-                }
-            })
-        if fecha_desde:
-            conds.append({"$gte": ["$$c.fecha_creacion", fecha_desde]})
-        if fecha_hasta:
-            conds.append({"$lte": ["$$c.fecha_creacion", fecha_hasta]})
-
-        filter_expr = {"$and": conds} if len(conds) > 1 else conds[0]
 
         pipeline = [
             {"$match": {"ticket_id": ticket_id}},
@@ -129,32 +133,11 @@ class CommentRepository(BaseRepository[CommentBucket, CommentCreate, CommentUpda
         Con filtros cuenta los elementos que satisfacen el filtro.
         """
         col = self.model.get_pymongo_collection()
-        filters = filters or {}
+        filter_expr = self._build_filter_expr(filters or {})
 
-        autor_filter = filters.get("autor")
-        fecha_desde = parse_date_filter(filters.get("fecha_desde"), is_end_date=False)
-        fecha_hasta = parse_date_filter(filters.get("fecha_hasta"), is_end_date=True)
-
-        has_criteria = bool(autor_filter or fecha_desde or fecha_hasta)
-        if not has_criteria:
+        if filter_expr is None:
             doc = await col.find_one({"ticket_id": ticket_id}, projection={"total": 1})
             return doc.get("total", 0) if doc else 0
-
-        conds = []
-        if autor_filter:
-            conds.append({
-                "$regexMatch": {
-                    "input": "$$c.autor",
-                    "regex": autor_filter,
-                    "options": "i"
-                }
-            })
-        if fecha_desde:
-            conds.append({"$gte": ["$$c.fecha_creacion", fecha_desde]})
-        if fecha_hasta:
-            conds.append({"$lte": ["$$c.fecha_creacion", fecha_hasta]})
-
-        filter_expr = {"$and": conds} if len(conds) > 1 else conds[0]
 
         pipeline = [
             {"$match": {"ticket_id": ticket_id}},

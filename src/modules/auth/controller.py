@@ -1,7 +1,9 @@
+from typing import List
+from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, status, Response, Request
-from .schemas import UserRegister, UserLogin, UserResponse, TokenResponse
+from .schemas import UserRegister, UserUpdate, UserLogin, UserResponse, TokenResponse
 from .service import AuthService
-from .dependencies import get_current_user
+from .dependencies import get_current_user, get_current_admin
 from .model import User
 from ...config.settings import settings
 
@@ -67,3 +69,58 @@ async def get_me(
     Retorna la información del usuario autenticado actualmente a partir de su Bearer Token.
     """
     return current_user
+
+
+@router.get(
+    "/users",
+    response_model=List[UserResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Listar operadores y administradores (Admin)"
+)
+async def list_users(
+    service: AuthService = Depends(),
+    current_admin: User = Depends(get_current_admin),
+):
+    return await service.list_users()
+
+
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear un nuevo operador o administrador (Admin)"
+)
+async def create_user(
+    user_in: UserRegister,
+    service: AuthService = Depends(),
+    current_admin: User = Depends(get_current_admin),
+):
+    return await service.register_user(user_in)
+
+
+@router.patch(
+    "/users/{user_id}",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Actualizar un operador o administrador (Admin)"
+)
+async def update_user(
+    user_id: PydanticObjectId,
+    user_in: UserUpdate,
+    service: AuthService = Depends(),
+    current_admin: User = Depends(get_current_admin),
+):
+    return await service.update_user(user_id, user_in, acting_admin=current_admin)
+
+
+@router.delete(
+    "/users/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar un operador (Admin)"
+)
+async def delete_user(
+    user_id: PydanticObjectId,
+    service: AuthService = Depends(),
+    current_admin: User = Depends(get_current_admin),
+):
+    await service.delete_user(user_id, acting_admin=current_admin)

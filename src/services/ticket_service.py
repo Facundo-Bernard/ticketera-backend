@@ -4,6 +4,7 @@ from fastapi import Depends, UploadFile, HTTPException, status
 from beanie import PydanticObjectId
 from pymongo import ReturnDocument
 from ..repositories.ticket_repository import TicketRepository
+from ..modules.comments.repository import CommentRepository
 from ..schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse, TicketPagedResponse
 from ..models.ticket_model import Ticket
 from ..core.exceptions import NotFoundException
@@ -15,10 +16,12 @@ class TicketService:
     def __init__(
         self,
         repository: TicketRepository = Depends(),
-        rate_limit_service: RateLimitService = Depends()
+        rate_limit_service: RateLimitService = Depends(),
+        comment_repository: CommentRepository = Depends(),
     ):
         self.repository = repository
         self.rate_limit_service = rate_limit_service
+        self.comment_repository = comment_repository
 
     async def _generate_next_identifier(self) -> str:
         """
@@ -294,6 +297,9 @@ class TicketService:
         if not success:
             raise NotFoundException(f"Ticket con id {id} no encontrado")
 
+        # Eliminar el bucket de comentarios asociado en cascada
+        await self.comment_repository.delete_by_ticket(id)
+
         # 1. Liberar bloqueo si existía
         ticket_lock_manager.release_lock(str(id))
 
@@ -301,7 +307,8 @@ class TicketService:
         try:
             await sse_manager.broadcast("ticket_eliminado", {
                 "id": str(id),
-                "identificador": identificador
+                "identificador": identificador,
+                "correo": str(ticket.correo),
             })
         except Exception:
             pass

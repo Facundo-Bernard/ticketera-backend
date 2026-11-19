@@ -1,10 +1,10 @@
 import os
 import mimetypes
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from bson import ObjectId
 from fastapi import UploadFile
 from typing import Optional, Tuple, List
-from ..config.settings import settings
+from ..config.database import get_motor_database
 from ..core.exceptions import NotFoundException, BadRequestException
 
 ALLOWED_FILE_TYPES = {
@@ -57,12 +57,10 @@ MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 class GridFSService:
     def __init__(self):
         self._bucket: Optional[AsyncIOMotorGridFSBucket] = None
-        self._client: Optional[AsyncIOMotorClient] = None
 
     def _get_bucket(self) -> AsyncIOMotorGridFSBucket:
         if self._bucket is None:
-            self._client = AsyncIOMotorClient(settings.MONGO_URI)
-            db = self._client[settings.MONGO_DB_NAME]
+            db = get_motor_database()
             self._bucket = AsyncIOMotorGridFSBucket(db)
         return self._bucket
 

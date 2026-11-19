@@ -50,6 +50,28 @@ async def get_current_user(
 
     return user
 
+async def get_optional_current_user(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    token: Optional[str] = None,
+    repository: UserRepository = Depends(),
+) -> Optional[User]:
+    """Retorna el usuario staff autenticado si existe sesión/token válido; caso contrario None."""
+    cookie_token = request.cookies.get("coopya_auth_token")
+    auth_token = cookie_token or (credentials.credentials if credentials else token)
+    if not auth_token:
+        return None
+    try:
+        return await get_current_user(
+            request=request,
+            credentials=credentials,
+            token=token,
+            repository=repository,
+        )
+    except UnauthorizedException:
+        return None
+
+
 async def get_current_admin(
     current_user: User = Depends(get_current_user)
 ) -> User:

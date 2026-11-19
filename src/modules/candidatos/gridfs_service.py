@@ -2,9 +2,9 @@ import os
 import mimetypes
 from typing import Optional, Tuple
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from fastapi import UploadFile
-from ...config.settings import settings
+from ...config.database import get_motor_database
 from ...core.exceptions import NotFoundException, BadRequestException
 
 ALLOWED_PAPELERIA_TYPES = {
@@ -43,27 +43,27 @@ class CandidatoGridFSService:
 
     def __init__(self):
         self._bucket: Optional[AsyncIOMotorGridFSBucket] = None
-        self._client: Optional[AsyncIOMotorClient] = None
 
     def _get_bucket(self) -> AsyncIOMotorGridFSBucket:
         if self._bucket is None:
-            self._client = AsyncIOMotorClient(settings.MONGO_URI)
-            db = self._client[settings.MONGO_DB_NAME]
+            db = get_motor_database()
             self._bucket = AsyncIOMotorGridFSBucket(db, bucket_name=self.BUCKET_NAME)
         return self._bucket
 
     def validate_file(self, file: UploadFile) -> str:
         """
-        Valida que el archivo subido sea estrictamente PDF o imagen y no supere el peso máximo.
+        Valida que el archivo subido sea estrictamente PDF o imagen segura y no supere el peso máximo.
         """
         filename = file.filename or "archivo"
         content_type = (file.content_type or "").lower()
         ext = os.path.splitext(filename.lower())[1]
 
-        is_valid_type = content_type in ALLOWED_PAPELERIA_TYPES or content_type.startswith("image/")
         is_valid_ext = ext in ALLOWED_PAPELERIA_EXTENSIONS
+        is_valid_type = content_type in ALLOWED_PAPELERIA_TYPES or (
+            content_type.startswith("image/") and ext in {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+        )
 
-        if not (is_valid_type or is_valid_ext):
+        if not (is_valid_type and is_valid_ext):
             raise BadRequestException(
                 f"El archivo '{filename}' no tiene un formato permitido para papelería. "
                 f"Solo se admiten documentos PDF o imágenes (PNG, JPEG, WebP, BMP)."
